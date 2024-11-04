@@ -1,0 +1,932 @@
+---
+title             : "Experiment 2 Analysis"
+shorttitle        : "Revised Exp 2"
+floatsintext      : yes
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+linenumbers       : yes
+mask              : no
+draft             : no
+
+documentclass     : "apa6"
+classoption       : "doc"
+output            : papaja::apa6_pdf
+---
+
+```{r setup, include = FALSE, warning=F, message=F}
+library(here)
+
+here::i_am('exp2_greetings/revised_ms_analyses.Rmd')
+source(here('_libraries_functions_ggvars.R'))
+source(here('exp2_greetings/read_in_data.R'))
+
+set.seed(36)
+knitr::opts_chunk$set(
+  cache.extra = knitr::rand_seed,
+  echo=T,
+  message=F,
+  warning=F,
+  digits=3)
+```
+
+## Experiment 2: Honorific Greetings  
+
+### Participants  
+
+```{r r2-g-pps}
+g_fin <- read.csv(here('data/greetings_reviewer2_data.csv'))
+g_fin$subject_id <- as.factor(g_fin$subject_id)
+
+g_pp_tab <- g_fin %>% 
+  distinct(subject_id, bebe_meses)%>% 
+  summarize(min=min(bebe_meses),
+            max=max(bebe_meses),
+            M=mean(bebe_meses),
+            SD=sd(bebe_meses))
+
+G_N <- nrow(g_fin %>% 
+  distinct(subject_id, bebe_meses))
+G_MIN_AGE <- op(g_pp_tab$min)
+G_MAX_AGE <- op(g_pp_tab$max)
+G_MEAN_AGE <- op(g_pp_tab$M)
+G_SD_AGE <- op(g_pp_tab$SD)
+```
+
+```{r r2-g-moms}
+g_mama_tab <- demo %>%
+  filter(subject_id %in% g_fin$subject_id,
+         !is.na(mama_edad)) %>%
+  summarize(min=min(mama_edad),
+            max=max(mama_edad),
+            M=mean(mama_edad),
+            SD=sd(mama_edad))
+
+G_MOT_MIN_AGE <- op(g_mama_tab$min)
+G_MOT_MAX_AGE <- op(g_mama_tab$max)
+G_MOT_M_AGE <- op(g_mama_tab$M)
+G_MOT_SD_AGE <- op(g_mama_tab$SD)
+```
+
+We report on data from $`r G_N`$ infants (\textit{range}$=`r G_MIN_AGE`-`r G_MAX_AGE`$\textit{mos}, $M_\textnormal{age}=`r G_MEAN_AGE`$\textit{mos}, $SD_\textnormal{age}=`r G_SD_AGE`$\textit{mos}) tested in the Canada Chica \textit{paraje} of a Tseltal Maya community in Tenejapa, Chiapas, in Southern Mexico. 
+
+Mothers ranged in age from $`r G_MOT_MIN_AGE`$ to $`r G_MOT_MAX_AGE`$\textit{yrs} ($M_\textnormal{age}=`r G_MOT_M_AGE`$\textit{yrs}, $SD_\textnormal{age}=`r G_MOT_SD_AGE`$\textit{yrs}) 
+
+### Mean Difference Score Analysis  
+
+```{r r2-g-diffs-df}
+g_fin$stimulus_set <- ''
+
+g_fin[g_fin$old_trial_name %in% c('old_woman-YOUNG_MAN',
+                          'OLD_WOMAN-young_man'), ]$stimulus_set <- 'A'
+
+g_fin[g_fin$old_trial_name %in% c('young_man-OLD_WOMAN',
+                          'YOUNG_MAN-old_woman'), ]$stimulus_set <- 'B'
+
+g_fin[g_fin$old_trial_name %in% c('old_man-YOUNG_WOMAN',
+                          'OLD_MAN-young_woman'), ]$stimulus_set <- 'C'
+
+g_fin[g_fin$old_trial_name %in% c('young_woman-OLD_MAN',
+                          'YOUNG_WOMAN-old_man'), ]$stimulus_set <- 'D'
+
+g_fin$target_stimulus <- paste(g_fin$target_noun, g_fin$stimulus_set, sep='')
+g_fin$non_target_stimulus <- ''
+
+g_fin[g_fin$target_stimulus=='young_manA',]$non_target_stimulus <- 'old_womanA'
+g_fin[g_fin$target_stimulus=='old_womanA',]$non_target_stimulus <- 'young_manA'
+
+g_fin[g_fin$target_stimulus=='young_manB',]$non_target_stimulus <- 'old_womanB'
+g_fin[g_fin$target_stimulus=='old_womanB',]$non_target_stimulus <- 'young_manB'
+
+g_fin[g_fin$target_stimulus=='young_womanC',]$non_target_stimulus <- 'old_manC'
+g_fin[g_fin$target_stimulus=='old_manC',]$non_target_stimulus <- 'young_womanC'
+
+g_fin[g_fin$target_stimulus=='young_womanD',]$non_target_stimulus <- 'old_manD'
+g_fin[g_fin$target_stimulus=='old_manD',]$non_target_stimulus <- 'young_womanD'
+
+g_target_df <- g_fin %>%
+  filter(noun_pair %in% c('old_man-young_woman', 'old_woman-young_man'),
+         subject_id %in% g_subjects) %>%
+  dplyr::select(subject_id, 
+                bebe_meses,
+                age_centered,
+                age_group,
+                stimulus_set, 
+                target_stimulus, 
+                noun_pair, 
+                post1_target_prop) %>%
+  mutate(merge_on_noun = target_stimulus)
+
+g_non_target_df <- g_fin %>%
+  filter(noun_pair %in% c('old_man-young_woman', 'old_woman-young_man'),
+                          subject_id %in% g_subjects) %>%
+  dplyr::select(subject_id, 
+                bebe_meses,
+                age_centered,
+                age_group,
+                noun_pair,
+                stimulus_set, 
+                non_target_stimulus,
+                post1_nontarget_prop) %>%
+  mutate(merge_on_noun=non_target_stimulus)
+
+g_target_nontarget_props_df <- merge(g_target_df, g_non_target_df, 
+                                      by=c('subject_id', 
+                                           'noun_pair',
+                                           'stimulus_set',
+                                           'merge_on_noun',
+                                           'age_centered',
+                                           'bebe_meses',
+                                           'age_group'), all=T) %>%
+  group_by(subject_id, bebe_meses, age_centered, age_group,
+           noun_pair, stimulus_set, merge_on_noun) %>%
+  summarize(post1_target_prop = na.mean(post1_target_prop),
+            post1_nontarget_prop = na.mean(post1_nontarget_prop))
+
+g_diffs_df <-  g_target_nontarget_props_df %>%
+  dplyr::select(subject_id, bebe_meses, age_centered, age_group,
+                noun_pair, stimulus_set, merge_on_noun, 
+                post1_target_prop,
+                post1_nontarget_prop) %>%
+  mutate(diff = post1_target_prop - post1_nontarget_prop) %>%
+  group_by(subject_id, 
+           bebe_meses, age_centered, age_group, 
+           noun_pair, stimulus_set) %>%
+  summarize(stim_pair_diff = mean(diff)) %>%
+  group_by(subject_id, bebe_meses, age_centered, age_group, noun_pair) %>%
+  summarize(noun_pair_diff = na.mean(stim_pair_diff)) %>%
+         filter(!is.na(noun_pair))
+
+g_diffs_df$age_std <- g_diffs_df$age_centered/as.numeric(G_SD_AGE)
+
+write.csv(g_diffs_df,
+         here('data/r_analysis_dfs', 'g_bs2012_diffs.csv')
+         )
+```
+
+#### By Item  
+
+```{r r2-g-by-item-overall}
+set.seed(36)
+
+g_by_item_tab <- g_diffs_df %>% 
+  group_by(noun_pair, subject_id, age_centered) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff)) %>%
+  filter(!is.na(subj_item_mean)) %>%
+  ungroup() %>%
+  group_by(noun_pair) %>%
+  summarize(n = n(),
+            M = na.mean(subj_item_mean),
+            cil=M-ci.low(subj_item_mean),
+            cih = M+ci.high(subj_item_mean),
+            min=min(subj_item_mean, na.rm=T),
+            max=max(subj_item_mean, na.rm=T))
+
+G_ALL_ITEM_MEAN <- mean(g_by_item_tab$M)
+G_ALL_ITEM_CIL <- G_ALL_ITEM_MEAN - ci.low(g_by_item_tab$M)
+G_ALL_ITEM_CIH <- G_ALL_ITEM_MEAN + ci.high(g_by_item_tab$M)
+G_ALL_ITEM_MIN <- min(g_by_item_tab$M)
+G_ALL_ITEM_MAX <- max(g_by_item_tab$M)
+N_G_POSITIVE_ITEMS <- sum(g_by_item_tab$M > 0)
+```
+
+```{r r2-g-by-item-table-s2}
+set.seed(36)
+
+write(apa_table(g_by_item_tab, 
+                caption='Experiment 2 Item Means'),
+      here('supplement/tables/exp_2/g_by_item_tab.tex'))
+
+xtable2kable(g_by_item_tab)
+```
+
+#### Non-parametric  
+
+```{r r2-g-item-bayes}
+# Bayes factor
+ttestBF(g_by_item_tab$M)
+```
+
+```{r r2-g-item-d}
+# Standard deviation
+stdev=sd(g_by_item_tab$M, na.rm=T)
+# Mean
+mean_data=na.mean(g_by_item_tab$M)
+# Effect size
+G_ITEM_D=abs(mean_data/stdev)
+```
+
+```{r r2-g-item-wilcox}
+g_by_item_sub_tab <- g_diffs_df %>% 
+  group_by(noun_pair, subject_id) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  filter(!is.na(subj_item_mean)) 
+
+g_item_wilcox <- wilcox.test(g_by_item_sub_tab$subj_item_mean,
+                             mu=0, 
+                             alternative="two.sided")
+
+G_ITEM_P_WILCOX <- reportP(as.numeric(g_item_wilcox['p.value']))
+```
+
+```{r r2-cn-item-binom}
+g_item_binom <- binom.test(2, 2, p=.5)
+
+G_ITEM_P_BINOM <- reportP(g_item_binom$p.value)
+```
+
+```{r r2-g-by-item-plots}
+set.seed(36)
+
+g_diffs_df$noun_pair_label <- ''
+g_diffs_df[
+  g_diffs_df$noun_pair=='old_woman-young_man',]$noun_pair_label <-
+  'old woman -\nyoung man'
+g_diffs_df[
+  g_diffs_df$noun_pair=='old_man-young_woman',]$noun_pair_label <-
+  'old man -\nyoung woman'
+
+g_plot2 <- g_diffs_df %>% 
+  group_by(noun_pair, noun_pair_label, subject_id) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  filter(!is.na(subj_item_mean)) %>%
+  group_by(noun_pair, noun_pair_label) %>%
+  mutate(n = n(),
+            item_mean = na.mean(subj_item_mean),
+            min=min(subj_item_mean, na.rm=T),
+            max=max(subj_item_mean, na.rm=T),
+            ci.low=item_mean-ci.low(subj_item_mean),
+            ci.high = item_mean+ci.high(subj_item_mean)) %>%
+  ggplot(., aes(x=noun_pair_label, y=item_mean, color=noun_pair)) +
+    geom_hline(yintercept=0) +
+  geom_jitter(aes(y=subj_item_mean), alpha=.5) +
+  geom_pointrange(aes(y=item_mean, ymin=ci.low, ymax=ci.high, 
+                      fill=noun_pair), shape=23, size=.5) + 
+  sb.density.theme +
+  theme(axis.text.x = element_text(angle=60, vjust=1, hjust=1, size=10),
+        legend.position = "none",
+        axis.title = element_text(colour="gray30", size=11, face="bold")) +
+  ylab("Increase in Target Looking") +
+  xlab("Honorific-Pair") +
+  ylim(-1, 1) + 
+  scale_discrete_manual(aesthetics=c("color", "fill"), 
+                        values=greeting_pair_fills)
+```
+
+#### By Subject 
+
+```{r r2-g-by-sub-tab}
+set.seed(36)
+
+g_sub_df <- g_diffs_df %>% 
+  filter(!is.na(noun_pair_diff)) %>%
+  group_by(subject_id, bebe_meses, age_centered) %>%
+  summarize(g_M = na.mean(noun_pair_diff),
+            n=n()) 
+
+G_N_FOR_MEAN_DIFF_ANALYSES <- nrow(g_sub_df)
+
+g_positive_scorers_age_tab <- g_sub_df %>%
+  filter(g_M>0) %>%
+  ungroup() %>%
+  summarize(mean=mean(bebe_meses),
+            sd=sd(bebe_meses),
+            ci.low=mean-ci.low(bebe_meses),
+            ci.high=mean+ci.high(bebe_meses))
+
+G_N_POSITIVE_SUBS <- sum(g_sub_df$g_M>0)
+G_N_TOTAL_SUBS <- nrow(g_sub_df)
+G_PS_MEAN_AGE <- g_positive_scorers_age_tab$mean
+G_PS_CILO_AGE <- g_positive_scorers_age_tab$ci.low
+G_PS_CIHI_AGE <- g_positive_scorers_age_tab$ci.high
+G_PS_SD_AGE <- g_positive_scorers_age_tab$sd
+```
+
+```{r r2-g-by-subject-overall-mean}
+set.seed(36)
+
+ g_by_sub_overall_tab <- g_diffs_df %>%
+  group_by(subject_id) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  filter(!is.na(subj_mean)) %>%
+  summarize(group_subject_mean = mean(subj_mean),
+            min=min(subj_mean),
+            max=max(subj_mean),
+            ci.low=group_subject_mean-ci.low(subj_mean),
+            ci.high = group_subject_mean+ci.high(subj_mean))
+
+G_ALL_SUB_MEAN <- g_by_sub_overall_tab$group_subject_mean
+G_ALL_SUB_CIL <- g_by_sub_overall_tab$ci.low
+G_ALL_SUB_CIH <- g_by_sub_overall_tab$ci.high
+G_ALL_SUB_MIN <- g_by_sub_overall_tab$min
+G_ALL_SUB_MAX <- g_by_sub_overall_tab$max
+```
+
+```{r r2-g-by-subject-plot, fig.align='center', fig.width=6}
+
+g_diffs_df %>% 
+  filter(!is.na(noun_pair_diff)) %>%
+  group_by(subject_id, bebe_meses) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff),
+            n_items = n()) %>%
+  mutate(all_pairs = n_items==2) %>%
+  filter(!is.na(subj_item_mean)) %>%
+ggplot(.) +
+  geom_point(aes(x=bebe_meses, y=subj_item_mean), 
+             color=rf_color, fill=rf_fill, 
+             shape=24, size=2.5) + 
+  geom_linerange(aes(x=bebe_meses, ymin=0, ymax=subj_item_mean),
+                 color=rf_color) +
+  geom_hline(yintercept=0) +
+  sb.density.theme +
+  theme(
+    axis.title = element_text(colour="gray30", size=11, face="bold"),
+        axis.text = element_text(colour="gray30", size=11),
+        axis.ticks = element_line(colour="gray30")) +
+  ylab("Increase in Target Looking") +
+  xlab("Child Age (months)") +
+  xlim(4.5, 16.0) +
+  scale_x_continuous(breaks=c(4,5,6,7,8,9,10,11,12,13,14,15)) +
+  ylim(-.4, .6) 
+
+ggsave(here('supplement/plots/exp_2/pdfs', 'g_meandiffs_bysub.pdf'),
+       device='pdf', width=2.5, height=1.5, units='in', scale=2)
+ggsave(here('supplement/plots/exp_2/pngs', 'g_meandiffs_bysub.png'), 
+       device='png', width=2.5, height=1.5, units='in', scale=2)
+```
+
+#### Non-parametric 
+
+```{r r2-g-bayes}
+# Bayes factor
+ttestBF(g_sub_df$g_M)
+```
+
+```{r r2-g-d}
+# Standard deviation
+stdev=sd(g_sub_df$g_M)
+# Mean
+mean_data=mean(g_sub_df$g_M)
+# Effect size
+G_SUBJ_D=abs(mean_data/stdev)
+```
+
+```{r g-subj-wilcox}
+g_subj_wilcox <- wilcox.test(g_sub_df$g_M, mu=0, 
+                              alternative="two.sided")
+
+G_SUBJ_P_WILCOX <- reportP(g_subj_wilcox$p.value)
+```
+
+```{r g-subj-binom}
+g_subj_binom <- binom.test(G_N_POSITIVE_SUBS, G_N_FOR_MEAN_DIFF_ANALYSES, p=.5)
+G_SUBJ_P_BINOM <- reportP(g_subj_binom$p.value)
+```
+
+#### MLM Intercept 
+
+```{r r2-g-lmer}
+set.seed(36)
+
+g_model0 <- lmer(noun_pair_diff ~ 0 + (1|subject_id), REML = FALSE,
+             g_diffs_df)
+g_model1 <- lmer(noun_pair_diff ~ 1 + (1|subject_id), REML = FALSE,
+               g_diffs_df)
+
+g_b0_anova <- anova(g_model1, g_model0)
+G_B0_CHISQ <- g_b0_anova$Chisq[2]
+G_B0_P <- reportP(g_b0_anova$`Pr(>Chisq)`[2])
+
+g_all_subs_intercept <- as.data.frame(
+  cbind(b=fixef(g_model1),
+  ci.low=confint(g_model1)[3,1], 
+  ci.high=confint(g_model1)[3,2])
+  )
+
+G_B0_EST <- op(g_all_subs_intercept$b)
+G_B0_CIL <- op(g_all_subs_intercept$ci.low)
+G_B0_CIH <- op(g_all_subs_intercept$ci.high)
+
+G_B0_TT_DF <- op(as.numeric(unlist(summary(g_model1)['coefficients'])[3]))
+G_B0_TT_STAT <- op(as.numeric(
+  unlist(summary(g_model1)['coefficients'])[4])
+  )
+G_B0_TT_P <- reportP(as.numeric(
+  unlist(summary(g_model1)['coefficients'])[5])
+  )
+
+#noun pair not enough variance to warrant random intercept
+write(texreg(g_model1), 
+      file=here('supplement/tables/exp_2/g_lmer0_tab.tex'))
+```
+
+$`r N_G_POSITIVE_ITEMS`$/2 honorific-pairs showed positive mean difference scores. 
+The mean across items was positive (\textit{range}: $`r G_ALL_ITEM_MIN`-`r G_ALL_ITEM_MAX`$, 
+$M=`r G_ALL_ITEM_MEAN`$ [$`r G_ALL_ITEM_CIL`$, $`r G_ALL_ITEM_CIH`$]; $`r G_ITEM_P_WILCOX`$, Wilcoxon test; $`r G_ITEM_P_BINOM`$, binomial test; $d=`r G_ITEM_D`$).
+
+$`r G_N_POSITIVE_SUBS`$/$`r G_N_TOTAL_SUBS`$ subjects showed a positive mean difference score ($M_\textnormal{age}=`r G_PS_MEAN_AGE`$ [$`r G_PS_CILO_AGE`$, $`r G_PS_CIHI_AGE`$], $SD_{age}=`r G_PS_SD_AGE`$). 
+The mean across subjects was positive (\textit{range}: $`r G_ALL_SUB_MIN`-`r G_ALL_SUB_MAX`$, $M=`r G_ALL_SUB_MEAN`$ [$`r G_ALL_SUB_CIL`$, $`r G_ALL_SUB_CIH`$]; $`r G_SUBJ_P_WILCOX`$, Wilcoxon test, $`r G_SUBJ_P_BINOM`$, binomial test, $d=`r G_SUBJ_D`$).
+
+A linear mixed effects model suggested that infants' positive mean performance was reliable, accounting for subject- and item-level variability ($\beta_0=`r G_B0_EST`$, 
+\textit{95\% CI:} [$`r G_B0_CIL`$, $`r G_B0_CIH`$], 
+$t(`r G_B0_TT_DF`)=`r G_B0_TT_STAT`$, 
+$`r G_B0_TT_P`$, $\chi^2(1)=`r G_B0_CHISQ`$, $`r G_B0_P`$). 
+
+#### Correlation with Age  
+
+```{r r2-g-by-subject-age}
+set.seed(36)
+
+g_by_subj_age_tab <- g_diffs_df %>% 
+  filter(!is.na(noun_pair_diff)) %>% 
+  group_by(subject_id, bebe_meses, age_centered) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff),
+            n_subjects = n(),
+            min = min(noun_pair_diff, na.rm=T),
+            max = max(noun_pair_diff, na.rm=T),
+            ci.low = subj_item_mean-ci.low(noun_pair_diff),
+            ci.high = subj_item_mean+ci.high(noun_pair_diff)) 
+
+g_age_cor_test <- cor.test(g_by_subj_age_tab$bebe_meses, 
+                           g_by_subj_age_tab$subj_item_mean,
+                           method="kendall")
+
+G_AGE_CORR <- as.numeric(g_age_cor_test$estimate)
+G_AGE_CORR_P <- g_age_cor_test$p.value
+G_AGE_CORR_T <- g_age_cor_test$statistic
+```
+
+Mean scores were not significantly correlated with infants' ages in months ($\tau=`r G_AGE_CORR`$, $p=`r G_AGE_CORR_P`$).
+
+```{r r2-g-lm-age}
+g_age_lm  <- lm(subj_item_mean ~ 1 + age_centered, g_by_subj_age_tab)
+summary(g_age_lm)
+
+write(texreg(g_age_lm), 
+      file=here('supplement/tables/exp_2/g_age_lm_tab.tex')) 
+```
+
+### Pre/Post Looking Logit Model 
+
+```{r r2-g-prepost-df}
+g_supp_pre <- g_fin %>%
+  select(pre_target_sum_ms, pre_nontarget_sum_ms, 
+         subject_id, bebe_meses, age_centered, noun_pair, path) 
+
+g_supp_pre$phase <- "pre-naming"
+g_supp_pre$target_bins <- round(g_supp_pre$pre_target_sum_ms/20,0)
+g_supp_pre$nontarget_bins <- round(g_supp_pre$pre_nontarget_sum_ms/20, 0)
+
+g_supp_pre <- g_supp_pre %>% 
+  select(subject_id, bebe_meses, age_centered, noun_pair, phase, 
+         target_bins, nontarget_bins, path) 
+
+g_supp_post <- g_fin %>% 
+  select(post1_target_sum_ms, post1_nontarget_sum_ms, 
+         subject_id, bebe_meses, age_centered, noun_pair, path) 
+
+g_supp_post$phase <- "post-naming"
+g_supp_post$target_bins <- round(g_supp_post$post1_target_sum_ms/20, 0)
+g_supp_post$nontarget_bins <- round(g_supp_post$post1_nontarget_sum_ms/20, 0)
+
+g_supp_post <- g_supp_post %>% 
+  select(subject_id, bebe_meses, age_centered, noun_pair, phase, 
+         target_bins, nontarget_bins, path) 
+
+g_supp_stacked_r2 <- rbind(g_supp_pre, g_supp_post)
+
+g_supp_stacked_r2$phase <- as.factor(g_supp_stacked_r2$phase)
+g_supp_stacked_r2$phase <- relevel(g_supp_stacked_r2$phase, ref="pre-naming")
+  
+g_supp_stacked_r2 %>%
+  group_by(subject_id, bebe_meses, age_centered, noun_pair, phase, path) %>%
+  summarize(target_bins = target_bins, 
+            nontarget_bins = nontarget_bins) %>%
+  write.csv(., here('data/r_analysis_dfs', 
+                  'g_prepost_target_looking.csv')
+          )
+```
+
+_Get back to 126 trials_
+
+```{r g-prepost-glmers, cache=T}
+set.seed(36) 
+
+g_supp_glmer_null <- glmer(cbind(target_bins, nontarget_bins) ~
+                         1 + (1|subject_id),
+                        family=binomial, g_supp_stacked_r2,
+                        control=glmerControl(optimizer="bobyqa", 
+                        optCtrl=list(maxfun=100000)))
+
+g_supp_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase + (1|subject_id),
+                        family=binomial, g_supp_stacked_r2,
+                        control=glmerControl(optimizer="bobyqa", 
+                        optCtrl=list(maxfun=100000)))
+
+g_supp_glmer_tab <- as.data.frame(
+  cbind("OR"=op(exp(fixef(g_supp_glmer))),
+        "CIL"=op(exp(confint.merMod(g_supp_glmer))[2:3,1]),
+        "CIH"=op(exp(confint.merMod(g_supp_glmer))[2:3,2])))
+
+G_POSTNAMING_OR <- g_supp_glmer_tab$OR[2]
+G_POSTNAMING_CIL <- g_supp_glmer_tab$CIL[2]
+G_POSTNAMING_CIH <- g_supp_glmer_tab$CIH[2]
+G_PHASE_WALD_CHISQ <- Anova(g_supp_glmer)['phase','Chisq']
+G_PHASE_WALD_P <- reportP(
+  Anova(g_supp_glmer)['phase','Pr(>Chisq)'])
+  
+g_supp_age_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase + age_centered + 
+                           (1|subject_id),
+                         family=binomial, g_supp_stacked_r2,
+                        control=glmerControl(optimizer="bobyqa", 
+                        optCtrl=list(maxfun=100000)))
+
+summary(g_supp_glmer)
+exp(fixef(g_supp_glmer))
+exp(confint(g_supp_glmer))
+Anova(g_supp_glmer)
+
+#G_POSTNAMING_OR <- op(g_pp_age_glmer_tab$OR[2])
+#G_POSTNAMING_CIL <- op(g_pp_age_glmer_tab$CIL[2])
+#G_POSTNAMING_CIH <- op(g_pp_age_glmer_tab$CIH[2])
+#G_PHASE_WALD_CHISQ <- op(Anova(g_supp_age_glmer)['phase','Chisq'])
+#G_PHASE_WALD_P <- op(Anova(g_supp_age_glmer)['phase','Pr(>Chisq)'])
+
+g_supp_ageint_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase*age_centered + 
+                           (1|subject_id), 
+                        family=binomial, g_supp_stacked_r2)
+
+confint.merMod(object = g_supp_ageint_glmer, method = "boot")
+
+g_supp_ageint_glmer_tab <- as.data.frame(
+  cbind("OR"=op(exp(fixef(g_supp_ageint_glmer))),
+        "CIL"=op(exp(confint.merMod(object = g_supp_ageint_glmer, 
+                                    method = "boot"))[2:5,1]),
+        "CIH"=op(exp(confint.merMod(object = g_supp_ageint_glmer, 
+                                    method = "boot"))[2:5,2])))
+
+g_supp_ageint_anova <- anova(g_supp_glmer, g_supp_age_glmer,
+                             g_supp_ageint_glmer)
+
+G_POST_AGE_INT_PHASE_OR <- g_supp_ageint_glmer_tab$OR[2]
+G_POST_AGE_INT_PHASE_CIL <- g_supp_ageint_glmer_tab$CIL[2]
+G_POST_AGE_INT_PHASE_CIH <- g_supp_ageint_glmer_tab$CIH[2]
+G_POST_AGE_INT_PHASE_WALD_CHISQ <- 
+  Anova(g_supp_ageint_glmer)['phase','Chisq']
+G_POST_AGE_INT_PHASE_WALD_P <-
+  reportP(Anova(g_supp_ageint_glmer)['phase','Pr(>Chisq)'])
+
+G_POST_AGE_INT_OR <- g_supp_ageint_glmer_tab$OR[4]
+G_POST_AGE_INT_CIL <- g_supp_ageint_glmer_tab$CIL[4]
+G_POST_AGE_INT_CIH <- g_supp_ageint_glmer_tab$CIH[4]
+G_POST_AGE_INT_WALD_CHISQ <- 
+  op(Anova(g_supp_ageint_glmer)['phase:age_centered','Chisq'])
+G_POST_AGE_INT_WALD_P <-
+  reportP(Anova(g_supp_ageint_glmer)['phase:age_centered','Pr(>Chisq)'])
+
+G_POST_AGE_INT_DF <- g_supp_ageint_anova$Df[2]
+G_POST_AGE_INT_CHISQ <- g_supp_ageint_anova$Chisq[2]
+G_POST_AGE_INT_P <- reportP(g_supp_ageint_anova$`Pr(>Chisq)`[2])
+
+Anova(g_supp_ageint_glmer)
+  
+write(texreg(list(g_supp_glmer, g_supp_age_glmer)), 
+      here('supplement/tables/exp_2', 'g_prepost_glmers_w_wo_age_tab.tex')
+      )
+
+write(texreg(list(g_supp_glmer, g_supp_age_glmer, g_supp_ageint_glmer)),
+      here('supplement/tables/exp_2', 'g_prepost_3glmers_tab.tex')
+      )
+```
+
+## Results Text  
+
+The odds ratio for trial phase (\textsc{post-naming} OR$=`r G_POSTNAMING_OR`$, \textit{95\% CI:} [$`r G_POSTNAMING_CIL`$, $`r G_POSTNAMING_CIH`$]) suggests that infants' relative looking time to the competitor faces was responsive to the honorific term used by their caregivers: infants dedicated a significantly greater proportion of their looking time to the target face after hearing the honorific ($Wald \chi^2(1)=`r G_PHASE_WALD_CHISQ`$, $`r G_PHASE_WALD_P`$, \textit{Cohen} $d=0.65$).
+
+As in Experiment 1, a model which additionally included infant age and its interaction with trial phase resulted in a significantly better fit ($\chi^2(`r G_POST_AGE_INT_DF`)=`r G_POST_AGE_INT_CHISQ`$, $`r G_POST_AGE_INT_P`$), showing a reliable effect of trial phase ($OR=`r G_POST_AGE_INT_PHASE_OR`$, \textit{95\% CI:} [$`r G_POST_AGE_INT_PHASE_CIL`$, $`r G_POST_AGE_INT_PHASE_CIH`$], \textit{Wald} $\chi^2(1)=`r G_POST_AGE_INT_PHASE_WALD_CHISQ`$, $`r G_POST_AGE_INT_PHASE_WALD_P`$, \textit{Cohen} $d=0.65$) and interaction with age, such that older children showed a greater increase in the ratio of target:non-target looking after hearing the target word ($OR=`r G_POST_AGE_INT_OR`$, \textit{95\% CI:} [$`r G_POST_AGE_INT_CIL`$, $`r G_POST_AGE_INT_CIH`$], $Wald \chi^2(1)=`r G_POST_AGE_INT_WALD_CHISQ`$, $`r G_POST_AGE_INT_WALD_P`$, \textit{Cohen} $d=0.081$).
+
+#### GLMERs by Age Group 
+
+From B&S2012:  
+>A separate hierarchical logistic regression model was created
+for each group of children (6–9 mo, 10–13 mo, 14–16 mo, and 18–
+20 mo) for each trial type (paired-picture and scene). Phase of
+trial (pretarget utterance vs. posttarget utterance) was included
+as a fixed-effect predictor, and subject and item were included
+as random effects. Each model predicts (the log of) the ratio of
+target to distracter looking, as calculated by counting time bins.
+
+# Trial Counts Across Analyses
+
+```{r r2-g-trials-lost}
+G_TOTAL_TRIALS_N <- nrow(g_fin)
+
+G_MEAN_DIFF_TRIALS_N <- g_target_nontarget_props_df %>%
+  dplyr::select(subject_id, age_centered, 
+                noun_pair, stimulus_set, merge_on_noun, 
+                post1_target_prop,
+                post1_nontarget_prop) %>%
+  mutate(diff = post1_target_prop - post1_nontarget_prop) %>%
+  group_by(
+    subject_id, age_centered, noun_pair, stimulus_set
+  ) %>%
+  summarize(stim_pair_diff = mean(diff)) %>%
+  filter(!is.na(stim_pair_diff)) %>%
+  nrow(.) * 2
+
+G_DROPPED_TRIALS <- G_TOTAL_TRIALS_N - G_MEAN_DIFF_TRIALS_N 
+G_DROPPED_TRIAL_PERCENT <- G_DROPPED_TRIALS/G_TOTAL_TRIALS_N
+```
+
+`r G_DROPPED_TRIALS` trials dropped for paired difference score analysis, or `r G_DROPPED_TRIAL_PERCENT*100`\% of non-excluded trials. 
+
+```{r r2-g-trials-summary}
+g_supp_stacked_r2 %>%
+  group_by(subject_id) %>%
+  summarize(trials=n()/2) %>%
+  ungroup() %>%
+  summarize(min=min(trials),
+            max=max(trials),
+            mean=mean(trials),
+            med=median(trials),
+            mode=DescTools::Mode(trials))
+```
+
+# Trial Durations  
+
+```{r r2-g-durations-trial}
+G_MED_TRIAL_DUR_S <- median(g_fin$trialtolookingoffset_dur_s, na.rm=T)
+G_MIN_TRIAL_DUR_S <- min(g_fin[g_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+G_MAX_TRIAL_DUR_S <- max(g_fin[g_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+G_MEAN_TRIAL_DUR_S <- mean(
+  g_fin[g_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+G_CIL_TRIAL_DUR_S <- G_MEAN_TRIAL_DUR_S - ci.low(
+  g_fin[g_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+G_CIH_TRIAL_DUR_S <- G_MEAN_TRIAL_DUR_S + ci.high(
+  g_fin[g_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+
+ggplot(g_fin, aes(x=trialtolookingoffset_dur_s)) +
+  geom_histogram(fill="#bae4bc") +
+  sb.density.theme +
+  geom_vline(xintercept=G_MED_TRIAL_DUR_S, color="red", lty=2) +
+  xlim(6,22) +
+  xlab("Trial Duration (s)") +
+  ylab("Number of Trials") + 
+  theme(axis.title = element_text(colour="gray30", size=11),
+        axis.text = element_text(colour="gray30", size=11),
+        axis.ticks = element_line(colour="gray30"),
+        plot.background = element_blank() ,
+        panel.grid.major = element_blank() ,
+        panel.grid.minor = element_blank() ,
+        panel.border = element_blank() ,
+        panel.background = element_blank(),
+        axis.line = element_line(color = "gray30")) +
+  annotate(
+    "text", label = "Median = 14s",
+    x = G_MED_TRIAL_DUR_S+2, y = 16, size = 4, colour = "red")
+
+ggsave(here('supplement/plots/exp_2/pdfs', 'g_trialdur_histogram.pdf'), 
+       device='pdf', width=2.5, height=1.25, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_2/pngs', 'g_trialdur_histogram.png'),
+       device='png', width=2.5, height=1.25, units='in', scale=2.5)
+```
+
+```{r r2-g-durations-triallooking}
+
+G_MED_TRIAL_LOOKING_S <- median(
+  g_fin$totaltrialtime_looking_sum_s)
+G_MIN_TRIAL_LOOKING_S <- 
+  min(g_fin$totaltrialtime_looking_sum_s)
+G_MAX_TRIAL_LOOKING_S <- 
+  max(g_fin$totaltrialtime_looking_sum_s)
+G_MEAN_TRIAL_LOOKING_S <- 
+  mean(g_fin$totaltrialtime_looking_sum_s)
+G_CIL_TRIAL_LOOKING_S <- G_MEAN_TRIAL_LOOKING_S - 
+  ci.low(g_fin$totaltrialtime_looking_sum_s)
+G_CIH_TRIAL_LOOKING_S <- G_MEAN_TRIAL_LOOKING_S + 
+  ci.high(g_fin$totaltrialtime_looking_sum_s)
+
+ggplot(g_fin, aes(x=totaltrialtime_looking_sum_s)) +
+  geom_histogram(fill="#7bccc4") +
+  sb.density.theme +
+  geom_vline(xintercept=G_MED_TRIAL_LOOKING_S, 
+             color="red", lty=2) +
+  xlim(2,20) +
+  xlab("Total Looking Time Duration (s)") +
+  ylab("Number of Trials") + 
+  theme(axis.title = element_text(colour="gray30", size=11),
+        axis.text = element_text(colour="gray30", size=11),
+        axis.ticks = element_line(colour="gray30"),
+        plot.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(color = "gray30"))  +
+  annotate(
+    "text", label = "Median = 12s",
+    x = G_MED_TRIAL_LOOKING_S+2.5, y = 12, size = 4, colour = "red")
+
+ggsave(here('supplement/plots/exp_2/pdfs', 'g_lookingtime_histogram.pdf'), 
+       device='pdf', width=2.5, height=1.25, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_2/pngs', 'g_lookingtime_histogram.png'),
+       device='png', width=2.5, height=1.25, units='in', scale=2.5)
+```
+
+```{r r2-g-durs-lookingprop}
+
+G_MED_LOOKING_PROP <- median(
+  g_fin$trialtolookingoffset_prop)
+G_MIN_LOOKING_PROP <- min(
+  g_fin$trialtolookingoffset_prop)
+G_MAX_LOOKING_PROP <- max(
+  g_fin$trialtolookingoffset_prop)
+G_MEAN_LOOKING_PROP <- mean(
+  g_fin$trialtolookingoffset_prop)
+G_CIL_LOOKING_PROP <- G_MEAN_LOOKING_PROP - 
+  ci.low(g_fin$trialtolookingoffset_prop)
+G_CIH_LOOKING_PROP <- G_MEAN_LOOKING_PROP + 
+  ci.high(g_fin$trialtolookingoffset_prop)
+
+ggplot(g_fin, aes(x=trialtolookingoffset_prop)) +
+  geom_histogram(fill="#7bccc4") +
+  sb.density.theme +
+  geom_vline(xintercept=G_MED_LOOKING_PROP, color="red", lty=2) +
+  xlim(0,1) +
+  xlab("Overall Looking Time Proportion") +
+  ylab("Number of Trials") + 
+  theme(axis.title = element_text(colour="gray30", size=11),
+        axis.text = element_text(colour="gray30", size=11),
+        axis.ticks = element_line(colour="gray30"),
+        plot.background = element_blank() ,
+        panel.grid.major = element_blank() ,
+        panel.grid.minor = element_blank() ,
+        panel.border = element_blank() ,
+        panel.background = element_blank(),
+        axis.line = element_line(color = "gray30")) +
+  annotate(
+    "text", label = "Median = 0.85",
+    x = G_MED_LOOKING_PROP-.12, y = 16, size = 4, colour = "red")
+
+ggsave(here('supplement/plots/exp_2/pdfs', 'g_lookingprop_histogram.pdf'), 
+       device='pdf', width=2.5, height=1.25, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_2/pngs', 'g_lookingprop_histogram.png'),
+       device='png', width=2.5, height=1.25, units='in', scale=2.5)
+```
+
+```{r r2-g-pre-duration}
+
+G_MED_PRE_DUR_S <- median(g_fin$pre_dur_ms/1000)
+G_MIN_PRE_DUR_S <- min(g_fin$pre_dur_ms/1000)
+G_MAX_PRE_DUR_S <- max(g_fin[g_fin$pre_dur_ms<10000,]$pre_dur_ms/1000)
+G_MEAN_PRE_DUR_S <- mean(g_fin[g_fin$pre_dur_ms<10000,]$pre_dur_ms/1000)
+
+ggplot(g_fin, aes(x=pre_dur_ms/1000))+
+  geom_histogram(fill="#bae4bc") +
+  sb.density.theme +
+  geom_vline(xintercept=G_MED_PRE_DUR_S, color="red", lty=2) +
+  xlim(2,6.5)+
+  xlab('"Pre-Naming" Window Duration (s)') +
+  ylab("Number of Trials") + 
+  theme(axis.title = element_text(colour="gray30", size=11),
+        axis.ticks = element_line(colour="gray30"),
+        plot.background = element_blank() ,
+        panel.grid.major = element_blank() ,
+        panel.grid.minor = element_blank() ,
+        panel.border = element_blank() ,
+        panel.background = element_blank(),
+        axis.line = element_line(color = "gray30")) +
+  annotate(
+    "text", label = "Median = 3.5s",
+    x = G_MED_PRE_DUR_S+2.4, y = 25, size = 4, colour = "red")
+```
+
+```{r r2-cn-durs-prepost-lookingdurs}
+g_prelookingdur_df <- g_fin %>% 
+  mutate(window = '"Pre-Naming" Window',
+         looking_dur = pre_looking_sum_ms/1000,
+         median = median(looking_dur),
+         mean = mean(looking_dur)) %>%
+  dplyr::select("subject_id", "window", "looking_dur", "median", "mean")
+
+G_PRE_MIN_DUR <- min(g_prelookingdur_df$looking_dur)
+G_PRE_MAX_DUR <- max(g_prelookingdur_df$looking_dur)
+G_PRE_MEAN_DUR <- mean(g_prelookingdur_df$looking_dur)
+G_PRE_MEDIAN_DUR <- median(g_prelookingdur_df$looking_dur)
+
+g_postlookingdur_df <- g_fin %>% 
+  mutate(window = '"Post-Naming"/Analysis Window',
+         looking_dur = post1_looking_sum_ms/1000,
+         median = median(looking_dur),
+         mean = mean(looking_dur)) %>%
+  dplyr::select("subject_id", "window", "looking_dur", "median", "mean")
+
+G_POST_MIN_DUR <- min(g_postlookingdur_df$looking_dur)
+G_POST_MAX_DUR <- max(g_postlookingdur_df$looking_dur)
+G_POST_MEAN_DUR <- mean(g_postlookingdur_df$looking_dur)
+G_POST_MEDIAN_DUR <- median(g_postlookingdur_df$looking_dur)
+
+g_prepost_lookingdur_df <- rbind(g_prelookingdur_df, g_postlookingdur_df)
+g_prepost_lookingdur_df$window <- 
+  factor(g_prepost_lookingdur_df$window, levels=c(
+    '"Pre-Naming" Window','"Post-Naming"/Analysis Window'), ordered=T) 
+
+g_prepost_lookingdur_label_df <- g_prepost_lookingdur_df %>%
+  group_by(window) %>%
+  summarize(median=median(median),
+            label=paste("Median =", round(median, 2), sep=" "))
+
+g_pp_durs <- ggplot(g_prepost_lookingdur_df, aes(x=looking_dur)) +
+  geom_histogram(fill="#7bccc4") +
+  sb.density.theme +
+  geom_vline(aes(xintercept=median), color="red", lty=2) +
+  xlim(0,5) +
+  xlab("Looking Time Duration (s)") +
+  ylab("Number of Trials") + 
+  theme(axis.title = element_text(colour="gray30", size=11),
+        axis.text = element_text(colour="gray30", size=11),
+        axis.ticks = element_line(colour="gray30"),
+        plot.background = element_blank(),
+        strip.text.x = element_text(colour="gray30", size=11))+
+  facet_wrap(~window) +
+  geom_text(data=g_prepost_lookingdur_label_df,
+            aes(x=median-1.2, label=label), y=45, 
+            color="red", size=4)
+
+ggsave(here('supplement/plots/exp_2/pdfs', 'g_lookingdurs_prepost.pdf'), 
+       device='pdf', width=2.75, height=1.5, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_2/pngs', 'g_lookingdurs_prepost.png'), 
+       device='png', width=2.75, height=1.5, units='in', scale=2.5)
+```
+
+```{r r2-g-durs-prepost-lookingprops}
+
+g_prelookingprop_df <- g_fin %>% 
+  mutate(window = '"Pre-Naming" Window',
+         looking_prop = pre_looking_sum_ms/pre_dur_ms,
+         median = median(looking_prop),
+         mean = mean(looking_prop)) %>%
+  dplyr::select("subject_id", "window", "looking_prop", "median", "mean")
+
+G_PRE_MIN_PROP <- min(g_prelookingprop_df$looking_prop)
+G_PRE_MAX_PROP <- max(g_prelookingprop_df$looking_prop)
+G_PRE_MEAN_PROP <- mean(g_prelookingprop_df$looking_prop)
+G_PRE_MEDIAN_PROP <- median(g_prelookingprop_df$looking_prop)
+
+g_postlookingprop_df <- g_fin %>% 
+  mutate(window = '"Post-Naming"/Analysis Window',
+         looking_prop = post1_looking_sum_ms/post1_dur_ms,
+         median = median(looking_prop),
+         mean = mean(looking_prop)) %>%
+  dplyr::select("subject_id", "window", "looking_prop", "median", "mean")
+
+G_POST_MIN_PROP <- min(g_postlookingprop_df$looking_prop)
+G_POST_MAX_PROP <- max(g_postlookingprop_df$looking_prop)
+G_POST_MEAN_PROP <- mean(g_postlookingprop_df$looking_prop)
+G_POST_MEDIAN_PROP <- median(g_postlookingprop_df$looking_prop)
+
+g_prepost_lookingprop_df <- rbind(g_prelookingprop_df, g_postlookingprop_df)
+g_prepost_lookingprop_df$window <- 
+  factor(g_prepost_lookingprop_df$window, levels=c(
+    '"Pre-Naming" Window','"Post-Naming"/Analysis Window'), ordered=T) 
+
+g_prepost_lookingprop_label_df <- g_prepost_lookingprop_df %>%
+  group_by(window) %>%
+  summarize(median=median(median),
+            label=paste("Median =", round(median, 2), sep=" "))
+
+ggplot(g_prepost_lookingprop_df, aes(x=looking_prop)) +
+  geom_histogram(fill="#7bccc4") +
+  sb.density.theme +
+  geom_vline(aes(xintercept=median), color="red", lty=2) +
+  xlim(0,1) +
+  ylim(0,22) +
+  xlab("Looking Time Proportion") +
+  ylab("Number of Trials") + 
+  theme(axis.title = element_text(colour="gray30", size=11),
+        axis.text = element_text(colour="gray30", size=11),
+        axis.ticks = element_line(colour="gray30"),
+        plot.background = element_blank(),
+        strip.text.x = element_text(colour="gray30", size=11))+
+  facet_wrap(~window) +
+  geom_text(data=g_prepost_lookingprop_label_df,
+            aes(x=median-.24, label=label), y=21, 
+            color="red", size=4)
+
+ggsave(here('supplement/plots/exp_2/pdfs', 'g_lookingprops_prepost.pdf'), 
+       device='pdf', width=2.75, height=1.5, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_2/pngs', 'g_lookingprops_prepost.png'), 
+       device='png', width=2.75, height=1.5, units='in', scale=2.5)
+```
+
+Trials in Experiment 2 were $`r G_MEAN_TRIAL_DUR_S`$\textit{s} [$`r G_CIL_TRIAL_DUR_S`$, $`r G_CIH_TRIAL_DUR_S`$] long on average (\textit{range}: $`r G_MIN_TRIAL_DUR_S`-`r G_MAX_TRIAL_DUR_S`$\textit{s}, \textit{Med}$=`r G_MED_TRIAL_DUR_S`$\textit{s}), and infants spent an average of $`r G_MEAN_TRIAL_LOOKING_S`$\textit{s} [$`r G_CIL_TRIAL_LOOKING_S`$, $`r G_CIH_TRIAL_LOOKING_S`$] total looking at the displays (\textit{range}: $`r G_MIN_TRIAL_LOOKING_S`-`r G_MAX_TRIAL_LOOKING_S`$\textit{s}, \textit{Med}$=`r G_MED_TRIAL_LOOKING_S`$\textit{s}, or between $`r G_MIN_LOOKING_PROP`$ and $`r G_MAX_LOOKING_PROP`$ of the total trial duration;  $M=`r G_MEAN_LOOKING_PROP`$ [$`r G_CIL_LOOKING_PROP`$, $`r G_CIH_LOOKING_PROP`$], \textit{Med}$=`r G_MED_LOOKING_PROP`$).
+
+The pre-naming window was between $`r G_MIN_PRE_DUR_S`$ and $`r G_MAX_PRE_DUR_S`$\textit{s} ($M_\textnormal{pre}=`r G_MEAN_PRE_DUR_S`$\textit{s}, $Med_\textnormal{pre}=`r G_MED_PRE_DUR_S`$\textit{s}). 
+
+The children in our final sample spent similar proportions of time looking at the displays during the pre- and post-naming periods (pre-naming: $`r G_PRE_MIN_PROP`-`r G_PRE_MAX_PROP`$, $M_\textnormal{proportion}=`r G_PRE_MEAN_PROP`$, $Med_\textnormal{proportion}=`r G_PRE_MEDIAN_PROP`$; post-naming: $`r G_POST_MIN_PROP`-`r G_POST_MAX_PROP`$, $M_\textnormal{proportion}=`r G_POST_MEAN_PROP`$, $Med_\textnormal{proportion}=`r G_POST_MEDIAN_PROP`$). 

@@ -1,0 +1,451 @@
+---
+title: 'PNAS Submission Revision 1 Exps. 1 and 2 Combined Plots'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(here)
+here::i_am('exps_1_2_combined/combined_plotting.Rmd')
+knitr::opts_chunk$set(echo = F,
+                      warning = F,
+                      message = F)
+source(here('_libraries_functions_ggvars.R'))
+
+cn_diffs_df <- read.csv(here('data/r_analysis_dfs/cn_bs2012_diffs.csv'))
+g_diffs_df <- read.csv(here('data/r_analysis_dfs/g_bs2012_diffs.csv'))
+
+cn_fin <- read.csv(
+  here('data/common_nouns_reviewer2_data.csv'))
+g_fin <- read.csv(
+  here('data/greetings_reviewer2_data.csv'))
+```
+
+```{r by-item-combined-plot}
+# by item plots
+set.seed(36)
+
+cn_diffs_df$noun_pair_label <- gsub('-', '-\n', cn_diffs_df$noun_pair)
+cn_diffs_df$noun_pair_label[cn_diffs_df$noun_pair=='car-shoe'] <- 
+  'shoe-\ncar'
+cn_diffs_df$noun_pair_label[cn_diffs_df$noun_pair=='chayote-cow'] <- 
+  'cow-\nsquash'
+
+cn_item_plot <- cn_diffs_df %>% 
+  group_by(noun_pair, noun_pair_label, subject_id) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  group_by(noun_pair, noun_pair_label) %>%
+  mutate(n_subjects = n(),
+         item_mean = na.mean(subj_item_mean),
+         min=min(subj_item_mean, na.rm=T),
+         max=max(subj_item_mean, na.rm=T),
+         ci.low=item_mean-ci.low(subj_item_mean),
+         ci.high = item_mean+ci.high(subj_item_mean)) %>%
+  ggplot(., aes(x=noun_pair_label, y=item_mean, color=noun_pair)) +
+  geom_hline(yintercept=0) +
+  geom_jitter(aes(y=subj_item_mean), alpha=.5, size=.5) +
+  geom_pointrange(aes(y=item_mean, 
+                      ymin=ci.low, ymax=ci.high, 
+                      fill=noun_pair), shape=23, size=0.3) +
+  ylim(-1, 1) +
+  sb.density.theme +
+  theme(axis.text.x = element_text(
+    angle=60, vjust=1, hjust=1, size=6),
+    legend.position = 'none',
+    axis.title = element_text(
+      colour='gray30', size=8, face='bold')) +
+  ylab('Increase in Target Looking') +
+  xlab('Noun-Pair') +
+  scale_discrete_manual(aesthetics=c('color', 'fill'), values=noun_pair_fills)
+
+g_diffs_df$noun_pair_label <- ''
+g_diffs_df[
+  g_diffs_df$noun_pair=='old_woman-young_man',]$noun_pair_label <-
+  'old woman -\nyoung man'
+g_diffs_df[
+  g_diffs_df$noun_pair=='old_man-young_woman',]$noun_pair_label <-
+  'old man -\nyoung woman'
+
+g_item_plot <- g_diffs_df %>% 
+  group_by(noun_pair, noun_pair_label, subject_id) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  filter(!is.na(subj_item_mean)) %>%
+  group_by(noun_pair, noun_pair_label) %>%
+  mutate(n = n(),
+         item_mean = na.mean(subj_item_mean),
+         min=min(subj_item_mean, na.rm=T),
+         max=max(subj_item_mean, na.rm=T),
+         ci.low=item_mean-ci.low(subj_item_mean),
+         ci.high = item_mean+ci.high(subj_item_mean)) %>%
+  ggplot(., aes(x=noun_pair_label, y=item_mean, color=noun_pair)) +
+  geom_hline(yintercept=0) +
+  geom_jitter(aes(y=subj_item_mean), alpha=.4, size=.5) +
+  geom_pointrange(aes(y=item_mean, ymin=ci.low, ymax=ci.high, 
+                      fill=noun_pair), shape=23, size=.3) + 
+  sb.density.theme +
+  theme(axis.text.x = element_text(angle=60, vjust=1, hjust=1, size=6),
+        legend.position = 'none',
+        axis.title = element_text(colour='gray30', size=8, face='bold')) +
+  ylab('Increase in Target Looking') +
+  xlab('Honorific-Pair') +
+  ylim(-1, 1) + 
+  scale_discrete_manual(aesthetics=c('color', 'fill'), 
+                        values=greeting_pair_fills)
+
+ggarrange(
+  cn_item_plot +
+    theme(plot.margin = margin(17,0,0,5),
+          axis.title.x=element_blank(),
+         # axis.title.y=element_text(size=8),
+          axis.ticks=element_line(color='gray30'), 
+          axis.text.x=element_text(face='italic')),
+  g_item_plot +
+    theme(plot.margin = margin(17,2,0,5),
+          axis.title.y=element_blank(),
+          axis.text.x=element_text(face='italic'),
+          axis.title.x=element_blank(),
+          axis.ticks=element_line(color='gray30')),  
+  labels='AUTO', widths = c(155, 55), ncol = 2, 
+  nrow = 1, align = 'h')
+  
+ggsave(here('manuscript/figures/combined_by_items_scale1.pdf'),  
+       ggarrange(
+  cn_item_plot +
+    theme(plot.margin = margin(17,0,0,5),
+          axis.title.x=element_blank(),
+         # axis.title.y=element_text(size=8),
+          axis.ticks=element_line(color='gray30'), 
+          axis.text.x=element_text(face='italic')),
+  g_item_plot +
+    theme(plot.margin = margin(17,2,0,5),
+          axis.title.y=element_blank(),
+          axis.text.x=element_text(face='italic'),
+          axis.title.x=element_blank(),
+          axis.ticks=element_line(color='gray30')),  
+  labels='AUTO', widths = c(155, 55),
+  ncol = 2, nrow = 1, align = 'h'), 
+  width = (7*.67), height=2.3, units ='in', scale=1)
+# 
+# ggsave(here('manuscript/figures/item_means_combined_7in.pdf'),  
+#        ggarrange(
+#          cn_item_plot +
+#            theme(plot.margin = margin(5,0,0,0),
+#                  axis.title.x=element_blank(),
+#                  axis.ticks=element_line(color='gray30'), 
+#                  axis.text.x=element_text(face='italic')),
+#          g_item_plot +
+#            theme(plot.margin = margin(5,0,0,0),
+#                  axis.text.x=element_text(face='italic'),
+#                  axis.title.x=element_blank(),
+#                  axis.ticks=element_line(color='gray30')),  
+#          labels='AUTO', widths = c(145, 55),
+#          ncol = 2, nrow = 1, align = 'h'), 
+#        width = 7, height=2.9, units ='in', scale=1)
+# 
+# ggsave(here('manuscript/figures/item_means_combined_4.7in.pdf'),  
+#        ggarrange(
+#          cn_item_plot +
+#            theme(plot.margin = margin(10,0,0,0),
+#                  axis.title.x=element_blank(),
+#                  axis.ticks=element_line(color='gray30'), 
+#                  axis.text.x=element_text(face='italic')),
+#          g_item_plot +
+#            theme(plot.margin = margin(10,10,0,10),
+#                  axis.text.x=element_text(face='italic'),
+#                  axis.title.x=element_blank(),
+#                  axis.ticks=element_line(color='gray30')),  
+#          labels='AUTO', widths = c(140, 63),
+#          ncol = 2, nrow = 1, align = 'h'), 
+#        width = 4.7, height=2.5, units ='in', scale=1)
+```
+
+```{r }
+bs_color ='black'
+  bs_color = tortpurple
+  rf_color = sheeppink
+  rf_fill =sheeppink
+```
+
+```{r by-subject-mean-diffs}
+# common nouns plot
+csp <- cn_diffs_df %>% 
+  filter(!is.na(noun_pair_diff)) %>%
+  group_by(subject_id, bebe_meses) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff),
+            n_items = n()) %>%
+  mutate(all_pairs = n_items==8) %>%
+  filter(!is.na(subj_item_mean)) %>%
+  ggplot(.) +
+  geom_point(aes(x=bebe_meses, y=subj_item_mean), 
+             color=sheeppink, fill=sheeppink,
+             alpha=.95, shape=21, size=2.5) + 
+  geom_linerange(aes(x=bebe_meses, ymin=0, ymax=subj_item_mean), 
+                 color=sheeppink) +
+  geom_hline(yintercept=0) +
+  sb.density.theme +
+  theme(
+    axis.title = element_text(colour='gray30', size=10, face='bold'),
+    axis.text = element_text(colour='gray30', size=9),
+    axis.ticks = element_line(colour='gray30')) +
+  ylab('Increase in Target Looking') +
+  xlab('Child Age (months)') +
+  xlim(4.5, 16.0) +
+  scale_x_continuous(breaks=c(4,5,6,7,8,9,10,11,12,13,14,15))+
+  ylim(-.4, .6) 
+
+# greetings
+gsp <- g_diffs_df %>% 
+  filter(!is.na(noun_pair_diff)) %>%
+  group_by(subject_id, bebe_meses) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff),
+            n_items = n()) %>%
+  mutate(all_pairs = n_items==2) %>%
+  filter(!is.na(subj_item_mean)) %>%
+  ggplot(.) +
+  geom_point(aes(x=bebe_meses, y=subj_item_mean), 
+             color=rf_color, fill=rf_fill, 
+             shape=24, size=2.5) + 
+  geom_linerange(aes(x=bebe_meses, ymin=0, ymax=subj_item_mean),
+                 color=rf_color) +
+  geom_hline(yintercept=0) +
+  sb.density.theme +
+  theme(
+    axis.title = element_text(colour='gray30', size=10, face='bold'),
+    axis.text = element_text(colour='gray30', size=9),
+    axis.ticks = element_line(colour='gray30')) +
+  ylab('Increase in Target Looking') +
+  xlab('Child Age (months)') +
+  xlim(4.5, 16.0) +
+  scale_x_continuous(breaks=c(4,5,6,7,8,9,10,11,12,13,14,15)) +
+  ylim(-.4, .6) 
+
+ggarrange(csp + (theme(plot.margin=margin(0,15,0,0))), 
+                 gsp + (theme(plot.margin=margin(0,0,0,15))), 
+                 labels='AUTO', widths = c(50, 50),
+                 ncol = 2, nrow = 1, align = 'h')
+
+ggsave(here('supplement/plots/combined/combined_by_subjs_scale1.pdf'), 
+       width = 7, height=2.75, units = 'in', scale=1)
+```
+
+```{r by-subject-bs2012-comparison}
+## annotation color assignments
+bs_color ='black'
+bs_color = tortpurple
+rf_color = sheeppink
+
+## dataframe for B&S2012 reported means
+bs2012 <- as.data.frame(
+  cbind(age_group=c('6-9 months', '10-13 months', '14-16 months'),
+        xmin=c(5, 10, 14), 
+        xmax=c(10, 14, 16), 
+        bs_subj_mean=c(0.074, 0.055, 0.29), 
+        bs_item_mean=c(0.065, 0.059, 0.28))
+) %>%
+  mutate_at(c('xmin', 'xmax', 'bs_subj_mean', 'bs_item_mean'), as.numeric)
+
+## dataframe for our reported means
+cn_sub_means <- cn_diffs_df %>%
+  group_by(age_group, subject_id) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff)) %>%
+  group_by(age_group) %>%
+  summarize(cn_subj_mean = na.mean(subj_item_mean))
+
+g_sub_means <- g_diffs_df %>%
+  group_by(age_group, subject_id) %>%
+  summarize(subj_item_mean = na.mean(noun_pair_diff)) %>%
+  group_by(age_group) %>%
+  summarize(g_subj_mean = na.mean(subj_item_mean))
+
+cn_item_means <- cn_diffs_df %>%
+  group_by(age_group, noun_pair) %>%
+  summarize(item_mean = na.mean(noun_pair_diff)) %>%
+  group_by(age_group) %>%
+  summarize(cn_item_mean = na.mean(item_mean))
+
+g_item_means <- g_diffs_df %>%
+  group_by(age_group, noun_pair) %>%
+  summarize(item_mean = na.mean(noun_pair_diff)) %>%
+  group_by(age_group) %>%
+  summarize(g_item_mean = na.mean(item_mean))
+
+## merge all dataframes
+subj_summaries <- merge(cn_sub_means, bs2012, by='age_group', all=T) %>%
+  merge(., g_sub_means, by='age_group', all=T)
+
+## add means on top of common nouns by subject
+csp_bs <- csp + geom_linerange(data=subj_summaries, 
+                               aes(xmin=xmin, xmax=xmax, 
+                                   y=bs_subj_mean), 
+                               lty='dashed',
+                               color=bs_color) + 
+  geom_linerange(data=subj_summaries, 
+                 aes(xmin=xmin, xmax=xmax, y=cn_subj_mean), 
+                 lty='dotdash', color=rf_color) +
+  annotate(
+    'text', label = 'B&S (2012) Mean',
+    hjust=0, x = 5, y = .6, 
+    size = 3, colour = bs_color) +
+  annotate(
+    'text', label = 'Current Mean',
+    hjust=0, x = 5, y = .54, 
+    size = 3, colour = rf_color) +
+  theme(axis.text = element_text(colour='gray30', size=8),
+        axis.title = element_text(colour='gray30', size=9)) 
+
+## add means on top of greetings by subject
+gsp_bs <- gsp + geom_linerange(data=subj_summaries, 
+                               aes(xmin=xmin, xmax=xmax, 
+                                   y=bs_subj_mean), 
+                               lty='dashed',
+                               color=bs_color) + 
+  geom_linerange(data=subj_summaries, 
+                 aes(xmin=xmin, xmax=xmax, y=g_subj_mean), 
+                 lty='dotdash', color=rf_color) +
+  annotate(
+    'text', label = 'B&S (2012) Mean',
+    hjust=0, x = 5, y = .6, 
+    size = 3, colour = bs_color) +
+  annotate(
+    'text', label = 'Current Mean',
+    hjust=0, x = 5, y = .54, 
+    size = 3, colour = rf_color) +
+  theme(axis.text = element_text(colour='gray30', size=8),
+        axis.title = element_text(colour='gray30', size=9)) 
+
+ggarrange(csp_bs + (theme(plot.margin=margin(1,5,5,1))), 
+                 gsp_bs + (theme(plot.margin=margin(1,2,5,5))), 
+                 labels='AUTO', widths = c(50, 50),
+                 ncol = 2, nrow = 1, align = 'h')
+
+ggsave(here('supplement/plots/combined/combined_by_subjs_w_means_7in.pdf'), 
+       ggarrange(csp_bs + (theme(plot.margin=margin(1,5,5,1))), 
+                 gsp_bs + (theme(plot.margin=margin(1,2,5,5))), 
+                 labels='AUTO', widths = c(50, 50),
+                 ncol = 2, nrow = 1, align = 'h'), 
+       width = 7, height=2.55, units = 'in', scale=1.2)
+```
+
+```{r prepost-looking-durations}
+prelookingdur_df <- cn_fin %>% 
+  mutate(window = "'Pre-Naming' Window",
+         looking_dur = pre_looking_sum_ms/1000,
+         median = median(looking_dur),
+         mean = mean(looking_dur)) %>%
+  dplyr::select('subject_id', 'window', 'looking_dur', 'median', 'mean')
+
+CN_PRE_MIN_DUR <- min(prelookingdur_df$pre_looking_sum_ms)
+CN_PRE_MAX_DUR <- max(prelookingdur_df$pre_looking_sum_ms)
+CN_PRE_MEAN_DUR <- mean(prelookingdur_df$pre_looking_sum_ms)
+CN_PRE_MEDIAN_DUR <- median(prelookingdur_df$pre_looking_sum_ms)
+
+postlookingdur_df <- cn_fin %>% 
+  mutate(window = "'Post-Naming'/Analysis Window",
+         looking_dur = post1_looking_sum_ms/1000,
+         median = median(looking_dur),
+         mean = mean(looking_dur)) %>%
+  dplyr::select('subject_id', 'window', 'looking_dur', 'median', 'mean')
+
+CN_POST_MIN_DUR <- min(postlookingdur_df$looking_dur)
+CN_POST_MAX_DUR <- max(postlookingdur_df$looking_dur)
+CN_POST_MEAN_DUR <- mean(postlookingdur_df$looking_dur)
+CN_POST_MEDIAN_DUR <- median(postlookingdur_df$looking_dur)
+
+prepost_lookingdur_df <- rbind(prelookingdur_df, postlookingdur_df)
+prepost_lookingdur_df$window <- 
+  factor(prepost_lookingdur_df$window, levels=c(
+    "'Pre-Naming' Window","'Post-Naming'/Analysis Window"), ordered=T) 
+
+prepost_lookingdur_label_df <- prepost_lookingdur_df %>%
+  group_by(window) %>%
+  summarize(median=median(median),
+            label=paste('Median =', round(median, 2), sep=' '))
+
+cn_pp_durs <- ggplot(prepost_lookingdur_df, aes(x=looking_dur)) +
+  geom_histogram(fill='#7bccc4') +
+  sb.density.theme +
+  geom_vline(aes(xintercept=median), color='red', lty=2) +
+  xlim(0,9) +
+  #ylim(0,100) +
+  xlab('Looking Time Duration (s)') +
+  ylab('Number of Trials') + 
+  theme(axis.title = element_text(colour='gray30', size=8),
+        axis.text = element_text(colour='gray30', size=8),
+        axis.ticks = element_line(colour='gray30'),
+        plot.background = element_blank(),
+        strip.text.x = element_text(colour='gray30', size=8))+
+  facet_wrap(~window) +
+  geom_text(data=prepost_lookingdur_label_df,
+            aes(x=median+2.2, label=label), y=250, 
+            color='red', size=3)
+
+g_prelookingdur_df <- g_fin %>% 
+  mutate(window = "'Pre-Naming' Window",
+         looking_dur = pre_looking_sum_ms/1000,
+         median = median(looking_dur),
+         mean = mean(looking_dur)) %>%
+  dplyr::select('subject_id', 'window', 'looking_dur', 'median', 'mean')
+
+G_PRE_MIN_DUR <- min(g_prelookingdur_df$looking_dur)
+G_PRE_MAX_DUR <- max(g_prelookingdur_df$looking_dur)
+G_PRE_MEAN_DUR <- mean(g_prelookingdur_df$looking_dur)
+G_PRE_MEDIAN_DUR <- median(g_prelookingdur_df$looking_dur)
+
+g_postlookingdur_df <- g_fin %>% 
+  mutate(window = "'Post-Naming'/Analysis Window",
+         looking_dur = post1_looking_sum_ms/1000,
+         median = median(looking_dur),
+         mean = mean(looking_dur)) %>%
+  dplyr::select('subject_id', 'window', 'looking_dur', 'median', 'mean')
+
+G_POST_MIN_DUR <- min(g_postlookingdur_df$looking_dur)
+G_POST_MAX_DUR <- max(g_postlookingdur_df$looking_dur)
+G_POST_MEAN_DUR <- mean(g_postlookingdur_df$looking_dur)
+G_POST_MEDIAN_DUR <- median(g_postlookingdur_df$looking_dur)
+
+g_prepost_lookingdur_df <- rbind(g_prelookingdur_df, g_postlookingdur_df)
+g_prepost_lookingdur_df$window <- 
+  factor(g_prepost_lookingdur_df$window, levels=c(
+    "'Pre-Naming' Window","'Post-Naming'/Analysis Window"), ordered=T) 
+
+g_prepost_lookingdur_label_df <- g_prepost_lookingdur_df %>%
+  group_by(window) %>%
+  summarize(median=median(median),
+            label=paste('Median =', round(median, 2), sep=' '))
+
+g_pp_durs <- ggplot(g_prepost_lookingdur_df, aes(x=looking_dur)) +
+  geom_histogram(fill='#7bccc4') +
+  sb.density.theme +
+  geom_vline(aes(xintercept=median), color='red', lty=2) +
+  xlim(0,5) +
+  #ylim(0,100) +
+  xlab('Looking Time Duration (s)') +
+  ylab('Number of Trials') + 
+  theme(axis.title = element_text(colour='gray30', size=8),
+        axis.text = element_text(colour='gray30', size=8),
+        axis.ticks = element_line(colour='gray30'),
+        plot.background = element_blank(),
+        strip.text.x = element_text(colour='gray30', size=8))+
+  facet_wrap(~window) +
+  geom_text(data=g_prepost_lookingdur_label_df,
+            aes(x=median+1.2, label=label), y=45, 
+            color='red', size=3)
+
+ggarrange(
+         cn_pp_durs,
+         g_pp_durs,
+         labels='AUTO', widths = c(100, 100),
+         ncol = 1, nrow = 2, align = 'h')
+
+ggsave(here(
+  'supplement/plots/combined/combined_prepost_lookingdurs_scale1.pdf'),  
+       ggarrange(
+         cn_pp_durs,
+         g_pp_durs,
+         labels='AUTO', widths = c(100, 100),
+         ncol = 1, nrow = 2, align = 'h'), 
+       width = 5, height=6, units ='in', scale=1)
+```

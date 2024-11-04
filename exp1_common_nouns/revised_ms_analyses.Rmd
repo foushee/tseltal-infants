@@ -1,0 +1,1515 @@
+---
+title             : 'Exp. 1 Revised Analysis'
+shorttitle        : 'Revised Exp 1'
+
+floatsintext      : yes
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+linenumbers       : yes
+mask              : no
+draft             : no
+
+documentclass     : 'apa6'
+classoption       : 'doc'
+output            : papaja::apa6_pdf
+---
+
+```{r setup, include = FALSE, warning=F, message=F}
+library(here)
+
+here::i_am('exp1_common_nouns/revised_ms_analyses.Rmd')
+source(here('_libraries_functions_ggvars.R'))
+source(here('exp1_common_nouns/read_in_data.R'))
+
+set.seed(36)
+knitr::opts_chunk$set(
+  cache.extra = knitr::rand_seed,
+  echo=T,
+  message=F,
+  warning=F,
+  digits=3)
+```
+
+## Reviewer 2
+
+>There is another concern about the data analysis that I'd like to raise. The trial-level inclusion criterion of a minimum of 500 ms during the analysis window seems extremely liberal, particularly since the window is 3500 ms long. 
+
+>However, a subsequent PNAS paper by Bergelson & Aslin (2017), also cited in the manuscript, used a more conservative criterion: 'Trials were excluded if infants did not look at either image for at least 1/3 of the target window'. This 1/3 criterion was also used by Bergelson & Swingley (2017). The 1/3 choice seems like a much more reasonable inclusion criterion than the 1/7 used in the current study, which seems like it could lead to a lot of noise.
+
+>It is also standard to exclude infants who do not provide data for at least half of the test trials (cf. Bergelson & Swingley, 2017). I understand that this is a very difficult-to-test sample, and that the authors want to retain as many infants in the sample as possible, but there is a tradeoff between data retention and interpretability of the effects. In particular, the 1/7 data retention criterion seems quite problematic.
+
+## Adopting (3133/3)ms looking-time threshhold for trial inclusion  
+
+```{r r2-cn-code-exclusions}
+## exclusions
+cn_r2$exclusions <- cn_r2$keep
+cn_r2$exclusions[cn_r2$keep=='keep'] <- ''
+cn_r2$exclusions[cn_r2$exclusions %in% c(
+  'infant not paying attention', 'infant crying')] <- 
+  'restive_infant'
+cn_r2$exclusions[cn_r2$pre_looking_sum_ms == 0] <-
+  'zero_pre_looking'
+cn_r2$exclusions[cn_r2$post1_looking_sum_ms < (3133/3)] <-
+  'under_third_window_looking'
+cn_r2$exclusions[cn_r2$exclusions=='mom_interference'] <-
+  'mom_error'
+cn_r2$exclusions[cn_r2$exclusions=='discard'] <-
+  ''
+TOTAL_EXCLUDED_TRIALS <- nrow(cn_r2[cn_r2$exclusions %in% 
+                                      c('restive_infant', 'zero_pre_looking', 
+                                        'mom_error',
+                                        'under_third_window_looking'),]) 
++ 3 # mom_errors flagged in Datavyu export script:
+# 'Invalid number of wordWindow cells' (because of mom not speaking prompt)' 
+```
+
+```{r r2-cn-exclusions}
+cn_exclusions_tab <- cn_r2 %>%
+  filter(exclusions!='trial_was_recycled',
+         exclusions!='old_trial_type') %>%
+  group_by(subject_id) %>%
+  summarize(excluded_trials=sum(exclusions!='')) %>%
+  ungroup() %>%
+  summarize(children_w_excl_trials=sum(excluded_trials>0),
+            min_excl_trials=min(excluded_trials),
+            max_excl_trials=max(excluded_trials),
+            mean_excl_trials=mean(excluded_trials))
+
+xtable2kable(cn_exclusions_tab)
+```
+
+Excluded test trials came from 20 infants who had between 0 and 16 excluded trials; all infants provided usable data for at least half of the test trials. If we instead adopt the criteria that infants should provide data for at least half of the difference score calculations, then one subject ('J94252'), with 16 test trials, but only two calculable difference scores, should be excluded (see next section---'EXCLUSION CRITERIA 2'---for revised mean difference score analyses, which use this criterion).
+
+```{r r2-cn-good-trials}
+cn_keeptrials_tab <- cn_r2 %>%
+  group_by(subject_id) %>%
+  summarize(good_sum=sum(exclusions==''),
+            good_prop = good_sum/n(),
+            good_prop_of_total = good_sum/32) %>%
+  ungroup() %>%
+  reframe(min_good_trials=min(good_sum),
+            min_n=sum(good_sum==min_good_trials),
+            max_good_trials=max(good_sum),
+            max_n=sum(good_sum==max_good_trials),
+            mean_good_trials=mean(good_sum),
+            med = median(good_sum),
+            mode_good_trials=DescTools::Mode(good_sum),
+            mode_n=sum(good_sum==mode_good_trials),
+            min_good_prop = min(good_prop_of_total),
+            max_good_prop=max(good_prop_of_total),
+            mean_good_prop=mean(good_prop_of_total)) %>%
+  round(., 2)
+
+xtable2kable(cn_keeptrials_tab)
+```
+
+A total of $`r TOTAL_EXCLUDED_TRIALS`$ trials from 20 infants were excluded because the infant never looked to the displays during the pre-naming period ($n=`r as.numeric(table(cn_r2['exclusions'])['zero_pre_looking'])`$), looked for less than one-third of the analysis window ($n=`r as.numeric(table(cn_r2['exclusions'])['under_third_window_looking'])`$), was distracted or crying ($n=`r as.numeric(table(cn_r2['exclusions'])['restive_infant'])`$), or because the caregiver erred or interfered ($n=`r as.numeric(table(cn_r2['exclusions'])['mom_error']) + 3`$). All infants contributed at least half (16) of test trials (\textit{range}$=`r cn_keeptrials_tab['min_good_trials'][1]`-`r cn_keeptrials_tab['max_good_trials'][1]`$, $M_\textnormal{trials}=`r cn_keeptrials_tab['mean_good_trials'][1]`$, $Med_\textnormal{trials}=`r cn_keeptrials_tab['med'][1]`$).
+
+# EXCLUSION CRITERIA 1 
+
+```{r r2-cn-pps}
+cn_fin <- cn_r2 %>% filter(exclusions=='')
+write.csv(cn_fin,
+          here('data/common_nouns_reviewer2_data.csv'))
+
+cn_fin_pp_df <- cn_fin %>%
+  distinct(subject_id, bebe_meses, mama_edad) 
+
+N <- length(unique(cn_fin_pp_df$subject_id))
+MIN_AGE <- min(cn_fin_pp_df$bebe_meses)
+MAX_AGE <- max(cn_fin_pp_df$bebe_meses)
+MEAN_AGE <- mean(cn_fin_pp_df$bebe_meses)
+SD_AGE <- sd(cn_fin_pp_df$bebe_meses)
+```
+
+We report on data from $`r N`$ infants ($`r MIN_AGE`-`r MAX_AGE`$\textit{mos}, $M_\textnormal{age}=`r MEAN_AGE`$\textit{mos}, $SD_\textnormal{age}=`r SD_AGE`$\textit{mos}). 
+
+```{r r2-cn-mot-age}
+MOT_M_AGE <- na.mean(cn_fin_pp_df$mama_edad)
+MOT_MIN_AGE <- min(cn_fin_pp_df$mama_edad, na.rm=T)
+MOT_MAX_AGE <- max(cn_fin_pp_df$mama_edad, na.rm=T)
+MOT_SD_AGE <- sd(cn_fin_pp_df$mama_edad, na.rm=T)
+```
+
+Mothers ranged in age from $`r MOT_MIN_AGE`$ to $`r MOT_MAX_AGE`$\textit{yrs} ($M_\textnormal{age}=`r MOT_M_AGE`$\textit{yrs}, $SD_\textnormal{age}=`r MOT_SD_AGE`$\textit{yrs}) 
+
+## Mean Difference Score Analysis
+
+```{r r2-cn-diffs-df}
+## specific image pairs (which of two image-pairs for each noun-pair)
+# want to know the pairs of values that go together for the B&S 2012 calculation,
+# which means the specific instances of each noun-pair where, e.g., baby is on L
+# and corn is on R
+cn_fin$trial_name_short <- gsub('^[0-9]*[-]', '', cn_fin$old_trial_name)
+
+cn_fin$stimulus_set <- ''
+# baby left, corn right = 'A'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'babcor-baby-L', 'babcor-corn-R',
+  'BABY-corn', 'baby-CORN',
+  'corbab-corn-R', 'corbab-baby-L')] <- 'A'
+
+# corn left, baby right = 'B'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'babcor-baby-R', 'babcor-corn-L',
+  'corbab-baby-R', 'corbab-corn-L',
+  'corn-BABY', 'CORN-baby')] <- 'B'
+
+# car left, shoe right = 'C'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'carsho-car-L', 'carsho-shoe-R',
+  'CAR-shoe', 'car-SHOE')] <- 'C'
+
+# shoe left, car right = 'D'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'carsho-car-R', 'carsho-shoe-L',
+  'shocar-shoe-L', 'shocar-car-R',
+  'SHOE-car', 'shoe-CAR', 'carshow-car-R')] <- 'D'
+
+# chayote left, cow right = 'E'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'chacow-chayote-L', 'chacow-cow-R',
+  'chayote-COW', 'CHAYOTE-cow')] <- 'E'
+
+# cow left, chayote right = 'F'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'chacow-chayote-R', 'chacow-cow-L',
+  'cowcha-cow-L', 'cowcha-chayote-R',
+  'COW-chayote', 'cow-CHAYOTE')] <- 'F'
+
+# dog left, fire right = 'G'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'dogfir-dog-L', 'dogfir-fire-R',
+  'DOG-fire', 'dog-FIRE',
+  'firdog-dog-L', 'firdog-fire-R')] <- 'G'
+
+# fire left, dog right = 'H'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'dogfir-dog-R', 'dogfir-fire-L',
+  'fire-DOG', 'FIRE-dog',
+  'firdog-dog-R', 'firdog-fire-L')] <- 'H'
+
+# horse left, soda right = 'I'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'horsod-horse-L', 'horsod-soda-R',
+  'HORSE-soda', 'horse-SODA',
+  'sodhor-horse-L', 'sodhor-soda-R')] <- 'I'
+
+# soda left, horse right = 'J'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'horsod-horse-R', 'horsod-soda-L',
+  'SODA-horse', 'soda-HORSE',
+  'sodhor-horse-R', 'sodhor-soda-L')] <- 'J'
+
+# rabbit left, soup right = 'K'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'rabsou-rabbit-L', 'rabsou-soup-R',
+  'RABBIT-soup', 'rabbit-SOUP',
+  'sourab-rabbit-L', 'sourab-soup-R')] <- 'K'
+
+# soup left, rabbit right = 'L'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'rabsou-rabbit-R', 'rabsou-soup-L',
+  'sourab-rabbit-R', 'sourab-soup-L',
+  'SOUP-rabbit', 'soup-RABBIT')] <- 'L'
+
+# sheep left, water right = 'M'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'shewat-sheep-L', 'shewat-water-R',
+  'sheep-WATER', 'SHEEP-water',
+  'watshe-sheep-L', 'watshe-water-R')] <- 'M'
+
+# water left, sheep right = 'N'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'shewat-sheep-R', 'shewat-water-L',
+  'watshe-water-L', 'watshe-sheep-R',
+  'water-SHEEP', 'WATER-sheep')] <- 'N'
+
+# chicken left, tortilla right = 'O'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'chitor-chicken-L', 'chitor-tortilla-R',
+  'chicken-TORTILLA', 'CHICKEN-tortilla',
+  'torchi-chicken-L', 'torchi-tortilla-R')] <- 'O'
+
+# tortilla left, chicken right = 'P'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'chitor-chicken-R', 'chitor-tortilla-L',
+  'torchi-tortilla-L', 'torchi-chicken-R',
+  'tortilla-CHICKEN', 'TORTILLA-chicken')] <- 'P'
+
+# car left, squash right = 'Q'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'carsqu-car-L', 'carsqu-squash-R')] <- 'Q'
+
+# squash left, car right = 'R'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'carsqu-squash-L', 'carsqu-car-R')] <- 'R'
+
+# cow left, spoon right = 'S'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'cowspo-cow-L', 'cowspo-spoon-R')] <- 'S'
+
+# spoon left, cow right = 'T'
+cn_fin$stimulus_set[cn_fin$trial_name_short %in% c(
+  'cowspo-spoon-L', 'cowspo-cow-R')] <- 'T'
+
+cn_fin$target_stimulus <- paste(cn_fin$target_noun, 
+                                cn_fin$stimulus_set, sep='')
+cn_fin$non_target_stimulus <- paste(cn_fin$non_target_noun, 
+                                    cn_fin$stimulus_set, sep='')
+
+cn_target_df <- cn_fin %>%
+  dplyr::select(subject_id, target_noun, stimulus_set, 
+                target_stimulus, 
+                noun_pair, post1_target_prop, 
+                age_centered, bebe_meses, age_group) %>%
+  mutate(merge_on_noun = target_stimulus)
+
+cn_non_target_df <- cn_fin %>%
+  dplyr::select(subject_id, non_target_noun, stimulus_set,
+                non_target_stimulus, 
+                noun_pair, post1_nontarget_prop, 
+                age_centered, bebe_meses, age_group) %>%
+  mutate(merge_on_noun=non_target_stimulus)
+
+cn_target_nontarget_props_df <- merge(
+  cn_target_df, cn_non_target_df, 
+                                      by=c('subject_id', 
+                                           'noun_pair',
+                                           'stimulus_set',
+                                           'merge_on_noun',
+                                           'age_centered',
+                                           'bebe_meses',
+                                           'age_group'),
+  all=T) %>%
+  group_by(subject_id, noun_pair, stimulus_set, merge_on_noun, 
+           bebe_meses, age_centered, age_group) %>%
+  summarize(post1_target_prop = na.mean(post1_target_prop),
+            post1_nontarget_prop = na.mean(post1_nontarget_prop))
+  
+cn_diffs_df <-  cn_target_nontarget_props_df %>%
+  filter(noun_pair %in% noun_pairs) %>%
+  dplyr::select(subject_id, 
+                bebe_meses, age_centered, age_group,
+                noun_pair, 
+                stimulus_set, merge_on_noun, 
+                post1_target_prop,
+                post1_nontarget_prop) %>%
+  mutate(diff = post1_target_prop - post1_nontarget_prop) %>%
+  group_by(
+    subject_id, bebe_meses, age_centered, age_group,
+    noun_pair, stimulus_set
+    ) %>%
+  summarize(stim_pair_diff = mean(diff)) %>%
+  group_by(subject_id, noun_pair, bebe_meses, age_centered, age_group) %>%
+  summarize(noun_pair_diff = na.mean(stim_pair_diff)) 
+
+write.csv(cn_diffs_df, here('data/r_analysis_dfs', 
+                                'cn_bs2012_diffs.csv')
+          )
+```
+
+```{r r2-cn-obs-per-subject}
+num_scores_bypp_tab <- cn_diffs_df %>%
+  filter(!is.na(noun_pair_diff)) %>%
+  group_by(subject_id) %>%
+  summarize(n_pairs=n()) %>%
+  group_by(n_pairs) %>%
+  summarize(n_subs = n())
+```
+
+We were able to calculate item-level scores for at least two noun-pairs for all subjects. There were eight subjects with calculable difference scores for all 8 noun-pairs, seven with calculable difference scores for 7/8, two with calculable scores for 6/8, one with calculable scores for 5/8, two with calculable scores for 4/8, and one with calculable scores for only 2/8.
+
+### Scores By Item  
+
+```{r r2-cn-by-item-overall}
+set.seed(36)
+
+by_item_tab <- cn_diffs_df %>%
+  group_by(noun_pair, subject_id) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  group_by(noun_pair) %>%
+  summarize(n = n(),
+            M = na.mean(subj_mean),
+            cil=M-ci.low(subj_mean),
+            cih = M+ci.high(subj_mean),
+            min=min(subj_mean, na.rm=T),
+            max=max(subj_mean, na.rm=T)) 
+
+ALL_ITEM_MEAN <- mean(by_item_tab$M)
+ALL_ITEM_CIL <- ALL_ITEM_MEAN - ci.low(by_item_tab$M)
+ALL_ITEM_CIH <- ALL_ITEM_MEAN + ci.high(by_item_tab$M)
+ALL_ITEM_MIN <- min(by_item_tab$M)
+ALL_ITEM_MAX <- max(by_item_tab$M)
+N_ITEMS_POSITIVE <- sum(by_item_tab$M>0)
+```
+
+```{r r2-cn-by-item-table-si} 
+write(apa_table(by_item_tab, 
+                caption='Experiment 1 Item Means'),
+      here('supplement/tables/exp_1/cn_by_item_tab.tex'))
+
+xtable2kable(by_item_tab)
+```
+
+#### Non-parametric tests
+
+```{r r2-cn-item-wilcox}
+cn_item_wilcox <- wilcox.test(by_item_tab$M, mu=0,
+                              alternative='two.sided')
+
+CN_ITEM_P_WILCOX <- reportP(cn_item_wilcox$p.value)
+```
+
+```{r r2-cn-item-binom}
+cn_item_binom <- binom.test(8, 8, p=.5)
+
+CN_ITEM_P_BINOM <- reportP(cn_item_binom$p.value)
+```
+
+```{r r2-cn-item-bf}
+set.seed(36)
+# Bayes factor
+ttestBF(by_item_tab$M)
+```
+
+```{r r2-cn-item-d}
+# Standard deviation
+stdev=sd(by_item_tab$M)
+# Mean
+mean_data=na.mean(by_item_tab$M)
+# Effect size
+CN_ITEM_D=abs(mean_data/stdev)
+```
+
+When implementing this new, more stringent exclusion criteria suggested by R2, $`r N_ITEMS_POSITIVE`$/8 noun-pairs showed a positive mean difference score (\textit{range}: $`r ALL_ITEM_MIN`-`r ALL_ITEM_MAX`$, $M=`r ALL_ITEM_MEAN`$ \textit{95\% CI}: [$`r ALL_ITEM_CIL`$, $`r ALL_ITEM_CIH`$]; $`r CN_ITEM_P_WILCOX`$, Wilcoxon test, $`r CN_ITEM_P_BINOM`$, binomial test, $d=`r CN_ITEM_D`$).
+
+```{r r2-cn-by-item-plots}
+set.seed(36)
+
+cn_diffs_df$noun_pair_label <- gsub('-', '-\n', cn_diffs_df$noun_pair)
+
+cn_diffs_df %>% 
+  group_by(noun_pair, noun_pair_label, subject_id) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  group_by(noun_pair, noun_pair_label) %>%
+  mutate(n_subjects = n(),
+            item_mean = na.mean(subj_mean),
+            min=min(subj_mean, na.rm=T),
+            max=max(subj_mean, na.rm=T),
+            ci.low=item_mean-ci.low(subj_mean),
+            ci.high = item_mean+ci.high(subj_mean)) %>%
+  ggplot(., aes(
+    x=noun_pair_label, y=item_mean, color=noun_pair)) +
+  geom_jitter(aes(y=subj_mean), alpha=.5) +
+  geom_pointrange(aes(y=item_mean, 
+                      ymin=ci.low, ymax=ci.high, 
+                      fill=noun_pair), shape=23, size=0.5) +
+  geom_hline(yintercept=0) +
+  ylim(-1, 1) +
+  sb.density.theme +
+  theme(axis.text.x = element_text(
+    angle=60, vjust=1, hjust=1, size=11),
+        legend.position = 'none',
+        axis.title = element_text(
+          colour='gray30', size=11, face='bold')) +
+  ylab('Increase in Target Looking') +
+  xlab('Noun-Pair') +
+  scale_discrete_manual(aesthetics=c('color', 'fill'), 
+                        values=noun_pair_fills)
+```
+
+### Scores By Subject 
+
+```{r r2-cn-by-subject}
+sub_means_tab <- cn_diffs_df %>%
+  filter(!is.na(noun_pair_diff)) %>%
+  group_by(subject_id, bebe_meses) %>%
+  summarize(n = n(),
+    subj_mean = na.mean(noun_pair_diff))
+
+positive_scorers_age_tab <- sub_means_tab %>%
+  filter(subj_mean>0) %>%
+  ungroup() %>%
+  summarize(min=min(bebe_meses),
+            max=max(bebe_meses),
+            mean=mean(bebe_meses),
+            sd=sd(bebe_meses),
+            ci.low=mean-ci.low(bebe_meses),
+            ci.high=mean+ci.high(bebe_meses))
+
+N_SUBS_POSITIVE <- sum(sub_means_tab$subj_mean>0)
+PS_MIN_AGE <- positive_scorers_age_tab$min
+PS_MAX_AGE <- positive_scorers_age_tab$max
+PS_MEAN_AGE <- positive_scorers_age_tab$mean
+PS_CIL_AGE <- positive_scorers_age_tab$ci.low
+PS_CIH_AGE <- positive_scorers_age_tab$ci.high
+PS_SD_AGE <- positive_scorers_age_tab$sd
+```
+
+```{r r2-cn-by-subject-overall-mean}
+set.seed(36)
+
+ by_sub_overall_tab <- cn_diffs_df %>%
+  group_by(subject_id) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  summarize(group_subject_mean = mean(subj_mean),
+            min=min(subj_mean),
+            max=max(subj_mean),
+            ci.low=group_subject_mean-ci.low(subj_mean),
+            ci.high = group_subject_mean+ci.high(subj_mean))
+ 
+ALL_SUB_MEAN <- by_sub_overall_tab$group_subject_mean
+ALL_SUB_CIL <- by_sub_overall_tab$ci.low
+ALL_SUB_CIH <- by_sub_overall_tab$ci.high
+ALL_SUB_MIN <- by_sub_overall_tab$min
+ALL_SUB_MAX <- by_sub_overall_tab$max
+```
+
+#### Non-parametric tests
+
+```{r r2-cn-subj-wilcox}
+cn_subj_wilcox <- wilcox.test(sub_means_tab$subj_mean, mu=0, 
+                              alternative='two.sided')
+
+CN_SUBJ_P_WILCOX <- reportP(cn_subj_wilcox$p.value)
+```
+
+```{r r2-cn-subj-binom}
+cn_subj_binom <- binom.test(N_SUBS_POSITIVE, 21, p=.5)
+
+CN_SUBJ_P_BINOM <- reportP(cn_subj_binom$p.value)
+```
+
+```{r r2-cn-subj-bf}
+set.seed(36)
+# Bayes factor
+ttestBF(sub_means_tab$subj_mean)
+
+ttestBF(sub_means_tab$subj_mean[sub_means_tab$bebe_meses<10])
+ttestBF(sub_means_tab$subj_mean[sub_means_tab$bebe_meses>=10 & 
+                                  sub_means_tab$bebe_meses<14])
+ttestBF(sub_means_tab$subj_mean[sub_means_tab$bebe_meses>=14])
+```
+
+```{r r2-cn-subj-d}
+# Standard deviation
+stdev=sd(sub_means_tab$subj_mean)
+# Mean
+mean_data=mean(sub_means_tab$subj_mean)
+# Effect size
+CN_SUBJ_D=abs(mean_data/stdev)
+```
+
+#### MLM Intercept 
+
+```{r r2-cn-lmer, warning=FALSE}
+set.seed(36)
+
+model0 <- lmer(noun_pair_diff ~ 0 + (1|subject_id), REML = FALSE,
+             cn_diffs_df)
+model1 <- lmer(noun_pair_diff ~ 1 + (1|subject_id), REML = FALSE,
+               cn_diffs_df)
+
+xtable2kable(summary(model1))
+
+cn_b0_anova <- anova(model1, model0)
+CN_B0_CHISQ <- cn_b0_anova$Chisq[2]
+CN_B0_CHI_P <- reportP(cn_b0_anova$`Pr(>Chisq)`[2])
+
+all_subs_intercept <- as.data.frame(cbind(b=fixef(model1),
+                          ci.low=confint(model1)[3,1], 
+                          ci.high=confint(model1)[3,2]))
+
+CN_B0_EST <- all_subs_intercept$b
+CN_B0_CIL <- all_subs_intercept$ci.low
+CN_B0_CIH <- all_subs_intercept$ci.high
+
+CN_B0_TT_DF <- as.numeric(unlist(summary(model1)['coefficients'])[3])
+CN_B0_TT_STAT <- as.numeric(unlist(summary(model1)['coefficients'])[4])
+CN_B0_TT_P <- reportP(as.numeric(unlist(summary(model1)['coefficients'])[5]))
+
+#noun pair not enough variance to warrant random intercept
+write(texreg(model1), 
+      file=here('supplement/tables/exp_1/cn_lmer0_tab.tex'))
+```
+
+The mean of infants' subject-level scores was also positive (\textit{range:} $`r ALL_SUB_MIN`-`r ALL_SUB_MAX`$, $M=`r ALL_SUB_MEAN`$ \textit{95\% CI:} [$`r ALL_SUB_CIL`$, $`r ALL_SUB_CIH`$], $`r CN_SUBJ_P_WILCOX`$, Wilcoxon; $`r CN_SUBJ_P_BINOM`$, $\textit{Cohen's d}=`r CN_SUBJ_D`$), with a majority ($`r N_SUBS_POSITIVE`/21$) of infants ($M_\textnormal{age}=`r PS_MEAN_AGE`$\textit{mos}, ${SD}_\textnormal{age}=`r PS_SD_AGE`$\textit{mos}) showing positive means across noun-pairs. 
+
+A linear mixed effects model with random intercepts for subjects indicates that these results were not driven by a few exceptional infants ($\beta_0=`r CN_B0_EST`$, \textit{95\% CI:} [$`r CN_B0_CIL`$, $`r CN_B0_CIH`$], 
+$t(`r CN_B0_TT_DF`)=`r CN_B0_TT_STAT`$, 
+$`r CN_B0_TT_P`$; $\chi^2(1)=`r CN_B0_CHISQ`$, $`r CN_B0_CHI_P`$; $d=`r 0.1218/sqrt(0.00301+0.19454)`$). 
+
+#### Correlation with Age   
+
+```{r r2-cn-age-corr}
+set.seed(36)
+
+by_subj_age_tab <- cn_diffs_df %>% 
+  group_by(subject_id, bebe_meses, age_centered) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff),
+            n_subjects = n(),
+            min = min(noun_pair_diff, na.rm=T),
+            max = max(noun_pair_diff, na.rm=T),
+            ci.low = subj_mean-ci.low(noun_pair_diff),
+            ci.high = subj_mean+ci.high(noun_pair_diff)) 
+
+age_cor_test <- cor.test(by_subj_age_tab$age_centered, 
+                         by_subj_age_tab$subj_mean,
+                         method='kendall')
+
+AGE_CORR <- as.numeric(age_cor_test$estimate)
+AGE_CORR_P <- reportP(as.numeric(age_cor_test$p.value))
+AGE_CORR_Z <- as.numeric(age_cor_test$statistic)
+```
+
+Subject-level scores exhibited an insignificant positive correlation with infants' age in months ($\tau=`r AGE_CORR`$, $`r AGE_CORR_P`$).  
+
+```{r r2-cn-age-corr-outlier, warning=FALSE}
+set.seed(36)
+
+age_cor_test_no15mo <- cor.test(
+  by_subj_age_tab[by_subj_age_tab$bebe_meses<15,]$bebe_meses,
+  by_subj_age_tab[by_subj_age_tab$bebe_meses<15,]$subj_mean,
+  method='kendall')
+
+AGE_OLDEST_PP <- max(by_subj_age_tab$bebe_meses)
+SCORE_OLDEST_PP <- op(by_subj_age_tab[
+  by_subj_age_tab$bebe_meses==AGE_OLDEST_PP,]$subj_mean)
+AGE_CORR_NO15MO <- as.numeric(age_cor_test_no15mo$estimate)
+AGE_CORR_P_NO15MO <- reportP(age_cor_test_no15mo$p.value)
+AGE_CORR_Z_NO15MO <- as.numeric(age_cor_test_no15mo$statistic)
+```
+
+Excluding the one (oldest) participant (`r op(AGE_OLDEST_PP)` months) who showed notably low evidence of word recognition (\textit{mean difference score}$=`r SCORE_OLDEST_PP`$), subject-level scores exhibited a significant ($\alpha=0.05$) positive correlation with infants' age in months ($\tau=`r AGE_CORR_NO15MO`$, $`r AGE_CORR_P_NO15MO`$).
+
+```{r r2-cn-lm-age}
+age_lm  <- lm(subj_mean ~ 1 + age_centered, by_subj_age_tab)
+summary(age_lm)
+
+write(texreg(age_lm), 
+      file=here('supplement/tables/exp_1/cn_age_lm_tab.tex')) 
+```
+
+### Results Section text
+
+All ($`r N_ITEMS_POSITIVE`$/8) noun-pairs showed positive mean scores, suggesting that the infants in our sample had knowledge of the nouns we tested, despite receiving very little directed speech ($\textit{range:} `r ALL_ITEM_MIN`-`r ALL_ITEM_MAX`$, $M=`r ALL_ITEM_MEAN`$, \textit{95\% bootstrapped CI:} [$`r ALL_ITEM_CIL`$, $`r ALL_ITEM_CIH`$]; $`r CN_ITEM_P_WILCOX`$, Wilcoxon; $`r CN_ITEM_P_BINOM`$, binomial test; $d=`r CN_ITEM_D`$).
+
+The mean of infants' subject-level scores was also positive (\textit{range:} $`r ALL_SUB_MIN`-`r ALL_SUB_MAX`$, $M=`r ALL_SUB_MEAN`$, \textit{95\% CI:} [$`r ALL_SUB_CIL`$, $`r ALL_SUB_CIH`$]; $`r CN_SUBJ_P_WILCOX`$, Wilcoxon; $`r CN_SUBJ_P_BINOM`$, binomial; $d=`r CN_SUBJ_D`$), with a majority ($`r N_SUBS_POSITIVE`/21$) of infants ($M_\textnormal{age}=`r PS_MEAN_AGE`\textit{mos}$, ${SD}_\textnormal{age}=`r PS_SD_AGE`\textit{mos}$) showing positive means across noun-pairs (see Figure in Supplement). 
+
+A linear mixed effects model with random intercepts for subjects\footnote{A model which additionally included random intercepts for item failed to converge.} indicates that these results were not driven by a few exceptional infants ($\beta_0=`r CN_B0_EST`$, \textit{95\% CI:} [$`r CN_B0_CIL`$, $`r CN_B0_CIH`$], 
+$t(`r CN_B0_TT_DF`)=`r CN_B0_TT_STAT`$, 
+$`r CN_B0_TT_P`$; $\chi^2(1)=`r CN_B0_CHISQ`$, $`r CN_B0_CHI_P`$; $d=`r 0.1218/sqrt(0.00301+0.19454)`$).
+
+### Comparison to B&S 2012 
+
+```{r r2-cn-by-subject-plot-incl, fig.align='center', fig.width=6}
+cn_diffs_df %>% 
+  filter(!is.na(noun_pair_diff)) %>%
+  group_by(subject_id, bebe_meses) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff),
+            n_items = n()) %>%
+  filter(!is.na(subj_mean)) %>%
+ggplot(.) +
+  geom_point(aes(x=bebe_meses, y=subj_mean), 
+             color=sheeppink, alpha=.95, shape=21, size=2.5, 
+             fill=sheeppink) + 
+  geom_linerange(aes(x=bebe_meses, 
+                     ymin=0, ymax=subj_mean), 
+                 color=sheeppink) +
+  geom_hline(yintercept=0) +
+  sb.density.theme +
+  theme(
+    axis.title = element_text(colour='gray30', size=11, face='bold'),
+        axis.text = element_text(colour='gray30', size=11),
+        axis.ticks = element_line(colour='gray30')) +
+  ylab('Increase in Target Looking') +
+  xlab('Child Age (months)') +
+  xlim(4.5, 16.0) +
+  scale_x_continuous(breaks=c(4,5,6,7,8,9,10,11,12,13,14,15))+
+  ylim(-.4, .6) 
+
+ggsave(here('supplement/plots/exp_1/pdfs', 'cn_meandiffs_bysub.pdf'),
+       device='pdf', width=2.5, height=1.5, units='in', scale=2)
+ggsave(here('supplement/plots/exp_1/pngs', 'cn_meandiffs_bysub.png'), 
+       device='png', width=2.5, height=1.5, units='in', scale=2)
+```
+
+```{r r2-cn-bs-comparison-calcs}
+bysub_agegroup_means_df <- 
+  cn_diffs_df %>%
+  group_by(subject_id, age_group) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff)) %>%
+  group_by(age_group) %>%
+  summarize(age_group_M=na.mean(subj_mean))
+
+CN_SUBJ_MDIFF_6MOS <- 
+  bysub_agegroup_means_df$age_group_M[
+    bysub_agegroup_means_df$age_group == '5-9 months']
+CN_SUBJ_MDIFF_10MOS <-
+  bysub_agegroup_means_df$age_group_M[
+    bysub_agegroup_means_df$age_group == '10-13 months']
+CN_SUBJ_MDIFF_14MOS <-
+  bysub_agegroup_means_df$age_group_M[
+    bysub_agegroup_means_df$age_group == '14-16 months']
+
+byitem_agegroup_means_df <- cn_diffs_df %>%
+  filter(noun_pair %in% noun_pairs) %>%
+  group_by(age_group, noun_pair) %>%
+  summarize(item_mean = na.mean(noun_pair_diff)) %>%
+  group_by(age_group) %>%
+  summarize(n = n(),
+            age_group_M = na.mean(item_mean),
+            cil = age_group_M - ci.low(item_mean),
+            cih = age_group_M + ci.high(item_mean),
+            min = min(item_mean, na.rm=T),
+            max = max(item_mean, na.rm=T))
+
+CN_ITEM_MDIFF_6MOS <- 
+  byitem_agegroup_means_df$age_group_M[
+    byitem_agegroup_means_df$age_group == '5-9 months']
+CN_ITEM_MDIFF_10MOS <- 
+  byitem_agegroup_means_df$age_group_M[
+    byitem_agegroup_means_df$age_group == '10-13 months']
+CN_ITEM_MDIFF_14MOS <- 
+  byitem_agegroup_means_df$age_group_M[
+    byitem_agegroup_means_df$age_group == '14-16 months']
+```
+
+The evidence that Tseltal infants possessed knowledge of the words we probed is similarly strong to evidence that has been used to infer the presence of word knowledge among U.S. infants. For example, Bergelson and Swingley (2012) reported mean scores of 0.074 (over subjects) and 0.065 (over items) for 6- to 9-month--olds, 0.055 (over subjects) and 0.059 (over items) for 10- to 13-month--olds, and 0.29 (over subjects) and 0.28 (over items) for 14-16--month-olds.
+
+We found: mean scores of `r CN_SUBJ_MDIFF_6MOS` (over subjects) and `r CN_ITEM_MDIFF_6MOS` (over items) for 6- to 9-month--olds, `r CN_SUBJ_MDIFF_10MOS` (over subjects) and `r CN_ITEM_MDIFF_10MOS` (over items) for 10- to 13-month--olds, and `r CN_SUBJ_MDIFF_14MOS` (over subjects) and `r CN_ITEM_MDIFF_14MOS` (over items) for 14- to 16-month--olds.
+
+# EXCLUSION CRITERIA 2 (EC2)
+
+## Replicating Mean Difference Analysis (EC2)
+
+_Including only infants affording calculation of at least half (4) of **difference scores** (rather than contributing half of all trials)_
+
+```{r r2-cn-obs-per-subject-2, include=F}
+cn_diffs_df %>%
+  filter(!is.na(noun_pair_diff)) %>%
+  group_by(subject_id) %>%
+  summarize(n_pairs=n()) %>%
+  group_by(n_pairs) %>%
+  summarize(n_subs = n())
+```
+
+*Under this criterion, total sample includes:*
+
+    _- 8 infants with calculable difference scores for all 8 noun-pairs_  
+    _- 7 infants with calculable difference scores for 7/8_    
+    _- 2 infants with calculable scores for 6/8_  
+    _- 1 infant with a calculable score for 5/8_    
+    _- 2 infants with calculable scores for 4/8_    
+
+  _- 1 EXCLUDED participant with calculable scores for only 2/8 (fewer than half of the set of noun-pairs)._
+
+_N=20_
+
+### Scores By Item (EC2)
+
+```{r r2-cn-by-item-overall-2}
+set.seed(36)
+
+by_item_tab2 <- cn_diffs_df %>% 
+  filter(subject_id!='J94252') %>%
+  group_by(noun_pair, subject_id) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  group_by(noun_pair) %>%
+  summarize(n_subjects = n(),
+            item_mean = na.mean(subj_mean),
+            median = median(subj_mean, na.rm=T),
+            ci.low=item_mean-ci.low(subj_mean),
+            ci.high = item_mean+ci.high(subj_mean),
+            min=min(subj_mean, na.rm=T),
+            max=max(subj_mean, na.rm=T)) 
+
+ALL_ITEM_MEAN2 <- mean(by_item_tab2$item_mean)
+ALL_ITEM_CIL2 <- ALL_ITEM_MEAN - ci.low(by_item_tab2$item_mean)
+ALL_ITEM_CIH2 <- ALL_ITEM_MEAN + ci.high(by_item_tab2$item_mean)
+ALL_ITEM_MIN2 <- min(by_item_tab2$item_mean)
+ALL_ITEM_MAX2 <- max(by_item_tab2$item_mean)
+N_ITEMS_POSITIVE2 <- sum(by_item_tab2$item_mean>0)
+```
+
+```{r r2-cn-by-item-table-si-2} 
+set.seed(36)
+
+by_item_tab2 <- cn_diffs_df %>%
+  filter(subject_id!='J94252') %>%
+  group_by(noun_pair, subject_id) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  group_by(noun_pair) %>%
+  summarize(n = n(),
+            M = na.mean(subj_mean),
+            cil=M-ci.low(subj_mean),
+            cih = M+ci.high(subj_mean),
+            min=min(subj_mean, na.rm=T),
+            max=max(subj_mean, na.rm=T))
+
+xtable2kable(by_item_tab2)
+```
+
+#### Non-parametric Tests (EC2)  
+
+```{r r2-cn-item-wilcox-2}
+cn_item_wilcox2 <- wilcox.test(by_item_tab2$M, mu=0,
+                              alternative='two.sided')
+
+CN_ITEM_P_WILCOX2 <- reportP(cn_item_wilcox2$p.value)
+```
+
+```{r r2-cn-item-binomial-2}
+cn_item_binom2 <- binom.test(N_ITEMS_POSITIVE2, 8, p=.5)
+
+CN_ITEM_P_BINOM2 <- reportP(cn_item_binom2$p.value)
+```
+
+```{r r2-cn-item-bf-2}
+set.seed(36)
+# Bayes factor
+ttestBF(by_item_tab2$M)
+```
+
+```{r r2-cn-item-d-2}
+# Standard deviation
+stdev=sd(by_item_tab2$M)
+# Mean
+mean_data=mean(by_item_tab2$M)
+# Effect size
+CN_ITEM_D2=abs(mean_data/stdev)
+```
+
+When implementing this new, even more stringent exclusion criteria (leading us to drop an entire participant's data), $`r N_ITEMS_POSITIVE2`$/8 noun-pairs showed a positive mean difference score ($`r ALL_ITEM_MIN2`-`r ALL_ITEM_MAX2`$, $M=`r ALL_ITEM_MEAN2`$ \textit{95\% CI:} [$`r ALL_ITEM_CIL2`$, $`r ALL_ITEM_CIH2`$]; $`r CN_ITEM_P_WILCOX2`$, Wilcoxon test; $`r CN_ITEM_P_BINOM2`$, binomial test, $d=`r CN_ITEM_D2`$).
+
+### Scores By Subject (EC2)
+
+```{r r2-cn-by-subject-2}
+sub_means_tab2 <- cn_diffs_df %>%
+  filter(!is.na(noun_pair_diff), 
+         subject_id != 'J94252') %>%
+  group_by(subject_id, bebe_meses) %>%
+  summarize(n = n(),
+    subj_mean = na.mean(noun_pair_diff))
+
+positive_scorers_age_tab2 <- sub_means_tab2 %>%
+  filter(subj_mean>0) %>%
+  ungroup() %>%
+  summarize(min=min(bebe_meses),
+            max=max(bebe_meses),
+            mean=mean(bebe_meses),
+            sd=sd(bebe_meses),
+            ci.low=mean-ci.low(bebe_meses),
+            ci.high=mean+ci.high(bebe_meses))
+
+N2 <- length(unique(sub_means_tab2$subject_id))
+
+N_SUBS_POSITIVE2 <- sum(sub_means_tab2$subj_mean>0)
+PS_MIN_AGE2 <- positive_scorers_age_tab2$min
+PS_MAX_AGE2 <- positive_scorers_age_tab2$max
+PS_MEAN_AGE2 <- positive_scorers_age_tab2$mean
+PS_CIL_AGE2 <- positive_scorers_age_tab2$ci.low
+PS_CIH_AGE2 <- positive_scorers_age_tab2$ci.high
+PS_SD_AGE2 <- positive_scorers_age_tab2$sd
+```
+
+$`r N_SUBS_POSITIVE2`/`r N2`$ subjects showed a positive mean difference score (\textit{range}: $`r PS_MIN_AGE2 - PS_MAX_AGE2`$\textit{yrs}, $M_{age}=`r PS_MEAN_AGE2`$ \textit{95\% CI:} [$`r PS_CIL_AGE2`$, $`r PS_CIH_AGE2`$], $SD_{age}=`r PS_SD_AGE2`$).
+
+```{r r2-cn-by-subject-overall-mean-2}
+set.seed(36)
+
+ by_sub_overall_tab2 <- cn_diffs_df %>%
+  filter(subject_id != 'J94252') %>%
+  group_by(subject_id) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff)) %>%
+  ungroup() %>%
+  summarize(group_subject_mean = mean(subj_mean),
+            min=min(subj_mean),
+            max=max(subj_mean),
+            ci.low=group_subject_mean-ci.low(subj_mean),
+            ci.high = group_subject_mean+ci.high(subj_mean))
+ 
+ALL_SUB_MEAN2 <- by_sub_overall_tab2$group_subject_mean
+ALL_SUB_CIL2 <- by_sub_overall_tab2$ci.low
+ALL_SUB_CIH2 <- by_sub_overall_tab2$ci.high
+ALL_SUB_MIN2 <- by_sub_overall_tab2$min
+ALL_SUB_MAX2 <- by_sub_overall_tab2$max
+```
+
+#### MLM Intercept (EC2)
+
+```{r r2-cn-lmer-2}
+set.seed(36)
+
+#noun pair not enough variance to warrant random intercept
+model0_2 <- lmer(noun_pair_diff ~ 0 + (1|subject_id), REML = FALSE,
+             cn_diffs_df[cn_diffs_df$subject_id!='J94252',])
+model1_2 <- lmer(noun_pair_diff ~ 1 + (1|subject_id), REML = FALSE,
+               cn_diffs_df[cn_diffs_df$subject_id!='J94252',])
+
+xtable2kable(summary(model1_2))
+
+cn_b0_anova_2 <- anova(model1_2, model0_2)
+CN_B0_CHISQ2 <- cn_b0_anova_2$Chisq[2]
+CN_B0_CHI_P2 <- reportP(cn_b0_anova_2$`Pr(>Chisq)`[2])
+
+all_subs_intercept2 <- as.data.frame(cbind(b=fixef(model1_2),
+                          ci.low=confint(model1_2)[3,1], 
+                          ci.high=confint(model1_2)[3,2]))
+
+CN_B0_EST2 <- all_subs_intercept2$b
+CN_B0_CIL2 <- all_subs_intercept2$ci.low
+CN_B0_CIH2 <- all_subs_intercept2$ci.high
+
+CN_B0_TT_DF2 <- as.numeric(unlist(summary(model1_2)['coefficients'])[3])
+CN_B0_TT_STAT2 <- as.numeric(unlist(summary(model1_2)['coefficients'])[4])
+CN_B0_TT_P2 <- reportP(as.numeric(unlist(summary(model1_2)['coefficients'])[5]))
+```
+
+#### Non-parametric tests (EC2)  
+
+```{r r2-cn-subj-wilcox-2}
+cn_subj_wilcox2 <- wilcox.test(sub_means_tab2$subj_mean, mu=0, 
+                              alternative='two.sided')
+
+CN_SUBJ_P_WILCOX2 <- reportP(cn_subj_wilcox2$p.value)
+```
+
+```{r r2-cn-subj-binom-2}
+cn_subj_binom2 <- binom.test(N_SUBS_POSITIVE2, N2, p=0.5)
+
+CN_SUBJ_P_BINOM2 <- reportP(cn_subj_binom2$p.value)
+```
+
+```{r r2-cn-subj-bf-2}
+set.seed(36)
+# Bayes factor
+ttestBF(sub_means_tab2$subj_mean)
+```
+
+```{r r2-cn-subj-d-2}
+# Standard deviation
+stdev=sd(sub_means_tab2$subj_mean)
+# Mean
+mean_data=mean(sub_means_tab2$subj_mean)
+# Effect size
+CN_SUBJ_D2=abs(mean_data/stdev)
+```
+
+Using this alternative interpretation of the reviewer's suggested exclusion criteria, the mean across all $`r N2`$ subjects was positive (\textit{range:} $`r ALL_SUB_MIN2`-`r ALL_SUB_MAX2`$, $M=`r ALL_SUB_MEAN2`$ \textit{95\% CI:} [$`r ALL_SUB_CIL2`$, $`r ALL_SUB_CIH2`$]; $`r CN_SUBJ_P_WILCOX2`$, Wilcoxon; $`r CN_SUBJ_P_BINOM2`$, binomial, $d=`r CN_SUBJ_D2`$).
+
+A linear mixed effects model with random intercepts for subjects suggests that these results were reliable across infants ($\beta_0=`r CN_B0_EST2`$, \textit{95\% CI:} [$`r CN_B0_CIL2`$, $`r CN_B0_CIH2`$], $t(`r CN_B0_TT_DF2`)=`r CN_B0_TT_STAT2`$, 
+$`r CN_B0_TT_P2`$; $\chi^2(1)=`r CN_B0_CHISQ2`$, $`r CN_B0_CHI_P2`$; $d=`r 0.1269/sqrt(0.19546+0.00287)`$). 
+
+#### Replicating Correlation with Age (EC2)  
+
+```{r r2-cn-by-subject-age-2}
+set.seed(36)
+
+by_subj_age_tab2 <- cn_diffs_df %>% 
+  filter(subject_id != 'J94252') %>%
+  group_by(subject_id, bebe_meses, age_centered) %>%
+  summarize(subj_mean = na.mean(noun_pair_diff),
+            n_subjects = n(),
+            min = min(noun_pair_diff, na.rm=T),
+            max = max(noun_pair_diff, na.rm=T),
+            ci.low = subj_mean-ci.low(noun_pair_diff),
+            ci.high = subj_mean+ci.high(noun_pair_diff)) 
+
+age_cor_test2 <- cor.test(by_subj_age_tab2$age_centered, 
+                         by_subj_age_tab2$subj_mean,
+                         method='kendall')
+
+AGE_CORR2 <- as.numeric(age_cor_test2$estimate)
+AGE_CORR_P2 <- as.numeric(age_cor_test2$p.value)
+AGE_CORR_Z2 <- as.numeric(age_cor_test2$statistic)
+```
+
+Using this alternate exclusion criteria, children's age in months exhibited an insignificant positive correlation with their mean difference scores across items ($\tau=`r AGE_CORR2`$, $p=`r AGE_CORR_P2`$).
+
+```{r r2-cn-lm-age-2}
+age_lm2  <- lm(subj_mean ~ 1 + age_centered, by_subj_age_tab2)
+summary(age_lm2)
+```
+
+# Pre/Post Looking Logit Model  
+
+_Dueling exclusion criteria are not relevant here, as even participant 'J94252' contributed at least half (16) of all test trials._
+
+```{r r2-cn-prepost-df}
+cn_supp_pre <- cn_fin %>%
+  select(pre_target_sum_ms, pre_nontarget_sum_ms, 
+         subject_id, bebe_meses, age_centered, noun_pair)  
+
+cn_supp_pre$phase <- 'pre-naming'
+cn_supp_pre$target_bins <- round(cn_supp_pre$pre_target_sum_ms/20,0)
+cn_supp_pre$nontarget_bins <- round(cn_supp_pre$pre_nontarget_sum_ms/20, 0)
+
+cn_supp_pre <- cn_supp_pre %>% 
+  select(subject_id, bebe_meses, age_centered, 
+         noun_pair, phase, target_bins, nontarget_bins) 
+
+cn_supp_post <- cn_fin %>%
+  select(post1_target_sum_ms, post1_nontarget_sum_ms, 
+         subject_id, bebe_meses, age_centered, noun_pair)
+
+cn_supp_post$phase <- 'post-naming'
+cn_supp_post$target_bins <- round(cn_supp_post$post1_target_sum_ms/20,0)
+cn_supp_post$nontarget_bins <- round(cn_supp_post$post1_nontarget_sum_ms/20,0)
+
+cn_supp_post <- cn_supp_post %>% 
+  select(subject_id, bebe_meses, age_centered, 
+         noun_pair, phase, target_bins, nontarget_bins) 
+
+cn_supp_stacked_r2 <- rbind(cn_supp_pre, cn_supp_post)
+
+cn_supp_stacked_r2$phase <- as.factor(cn_supp_stacked_r2$phase)
+cn_supp_stacked_r2$phase <- relevel(cn_supp_stacked_r2$phase, ref='pre-naming')
+
+cn_supp_stacked_r2 %>%
+  group_by(subject_id, bebe_meses, age_centered, noun_pair, phase) %>%
+  reframe(target_bins = target_bins, 
+            nontarget_bins = nontarget_bins) %>%
+write.csv(., here('data/r_analysis_dfs', 
+                  'cn_prepost_target_looking.csv')
+          )
+```
+
+```{r r2-cn-prepost-glmer, cache=T}
+set.seed(36)
+cn_supp_glmer_null <- glmer(cbind(target_bins, nontarget_bins) ~
+                         1 + (1|subject_id) + (1|noun_pair),
+                        family=binomial, cn_supp_stacked_r2)
+
+cn_supp_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase + (1|subject_id) + (1|noun_pair),
+                        family=binomial, cn_supp_stacked_r2)
+
+summary(cn_supp_glmer)
+
+cn_supp_glmer_tab <- as.data.frame(
+  cbind('OR'=op(exp(fixef(cn_supp_glmer))),
+        'CIL'=op(exp(confint(cn_supp_glmer))[3:4,1]),
+        'CIH'=op(exp(confint(cn_supp_glmer))[3:4,2])))
+
+POSTNAMING_OR <- cn_supp_glmer_tab$OR[2]
+POSTNAMING_CIL <- cn_supp_glmer_tab$CIL[2]
+POSTNAMING_CIH <- cn_supp_glmer_tab$CIH[2]
+PHASE_WALD_CHISQ <- Anova(cn_supp_glmer)['phase','Chisq']
+PHASE_WALD_P <- reportP(Anova(cn_supp_glmer)['phase','Pr(>Chisq)'])
+
+anova(cn_supp_glmer_null, cn_supp_glmer)
+Anova(cn_supp_glmer)
+```
+
+Model summary shows that model is fit on 1056 observations from 21 subjects 
+(number of trials = 1056/2 = 528, as model is fit to data in 'long' form, 
+where two rows for each trial: pre-naming and post-naming).
+
+```{r r2-cn-prepost-glmer-age, cache=T}
+cn_supp_stacked_r2$ratio <- cn_supp_stacked_r2$target_bins/
+  cn_supp_stacked_r2$nontarget_bins
+
+cn_supp_age_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase + age_centered + 
+                           (1|subject_id) + (1|noun_pair),
+                        family=binomial, cn_supp_stacked_r2)
+
+cn_pp_age_glmer_tab <- as.data.frame(
+  cbind('OR'=op(exp(fixef(cn_supp_age_glmer))),
+        'CIL'=op(exp(confint(cn_supp_age_glmer))[3:5,1]),
+        'CIH'=op(exp(confint(cn_supp_age_glmer))[3:5,2])))
+
+anova(cn_supp_glmer, cn_supp_age_glmer)
+Anova(cn_supp_age_glmer)
+```
+
+```{r r2-cn-prepost-glmer-ageint, cache=T}
+cn_supp_ageint_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase*age_centered + 
+                           (1|subject_id) + (1|noun_pair),
+                        family=binomial, cn_supp_stacked_r2)
+
+cn_supp_ageint_glmer_tab <- as.data.frame(
+  cbind('OR'=op(exp(fixef(cn_supp_ageint_glmer))),
+        'CIL'=op(exp(confint(cn_supp_ageint_glmer))[3:6,1]),
+        'CIH'=op(exp(confint(cn_supp_ageint_glmer))[3:6,2])))
+
+## reporting effect of trial phase
+POST_AGE_INT_PHASE_OR <- cn_supp_ageint_glmer_tab$OR[2]
+POST_AGE_INT_PHASE_CIL <- cn_supp_ageint_glmer_tab$CIL[2]
+POST_AGE_INT_PHASE_CIH <- cn_supp_ageint_glmer_tab$CIH[2]
+POST_AGE_INT_PHASE_WALD_CHISQ <- 
+  Anova(cn_supp_ageint_glmer)['phase','Chisq']
+POST_AGE_INT_PHASE_WALD_P <-
+  reportP(Anova(cn_supp_ageint_glmer)['phase','Pr(>Chisq)'])
+
+## reporting interaction between phase and age
+POST_AGE_INT_OR <- cn_supp_ageint_glmer_tab$OR[4]
+POST_AGE_INT_CIL <- cn_supp_ageint_glmer_tab$CIL[4]
+POST_AGE_INT_CIH <- cn_supp_ageint_glmer_tab$CIH[4]
+POST_AGE_INT_WALD_CHISQ <- 
+  Anova(cn_supp_ageint_glmer)['phase:age_centered','Chisq']
+POST_AGE_INT_WALD_P <-
+  reportP(Anova(cn_supp_ageint_glmer)['phase:age_centered','Pr(>Chisq)'])
+
+## comparing interaction model to model with phase alone
+cn_supp_ageint_anova <- anova(cn_supp_glmer, cn_supp_ageint_glmer)
+
+POST_AGE_INT_DF <- cn_supp_ageint_anova$Df[2]
+POST_AGE_INT_CHISQ <- cn_supp_ageint_anova$Chisq[2]
+POST_AGE_INT_P <- reportP(cn_supp_ageint_anova$`Pr(>Chisq)`[2])
+
+## print summary, model comparison, type 2 tests
+summary(cn_supp_ageint_glmer)
+anova(cn_supp_glmer, cn_supp_ageint_glmer)
+Anova(cn_supp_ageint_glmer)
+
+write(texreg(list(cn_supp_glmer, cn_supp_age_glmer)), 
+      here('supplement/tables/exp_1', 'cn_prepost_glmers_w_wo_age_tab.tex')
+      )
+
+write(texreg(list(cn_supp_glmer, cn_supp_age_glmer, cn_supp_ageint_glmer)),
+      here('supplement/tables/exp_1', 'cn_prepost_3glmers_tab.tex')
+      )
+```
+
+The odds ratio for trial phase (\textsc{post-naming} \textit{OR}$=`r POSTNAMING_OR`$, \textit{95\% CI:} [$`r POSTNAMING_CIL`$, $`r POSTNAMING_CIH`$]) indicates that infants dedicated a significantly greater share of their visual attention to the target image \textit{after} hearing it labeled than \textit{before} hearing it labeled, controlling for subject-- and item--level variability (\textit{Wald} $\chi^2(1)=`r PHASE_WALD_CHISQ`$, $`r PHASE_WALD_P`$, $d=`r 0.24900/sqrt(0.0327+0.0234)`$; see Supplement). 
+
+A model which additionally included infant age and its interaction with trial phase resulted in a significantly better fit ($\chi^2(`r POST_AGE_INT_DF`)=`r POST_AGE_INT_CHISQ`$, $`r POST_AGE_INT_P`$), showing a reliable effect of trial phase (\textsc{post-naming} \textit{OR}$=`r POST_AGE_INT_PHASE_OR`$, \textit{95\% CI:} [$`r POST_AGE_INT_PHASE_CIL`$, $`r POST_AGE_INT_PHASE_CIH`$], \textit{Wald} $\chi^2(1)=`r POST_AGE_INT_PHASE_WALD_CHISQ`$, $`r POST_AGE_INT_PHASE_WALD_P`$, $d=`r 0.25195/sqrt(0.0320+0.0235)`$) and interaction with age, such that older children showed a greater increase in the ratio of targe to non-target looking after hearing the target word (\textit{OR}$=`r POST_AGE_INT_OR`$, \textit{95\% CI:} [$`r POST_AGE_INT_CIL`$, $`r POST_AGE_INT_CIH`$], \textit{Wald} $\chi^2(1)=`r POST_AGE_INT_WALD_CHISQ`$, $`r POST_AGE_INT_WALD_P`$, $d=`r 0.07640/sqrt(0.0320+0.0235)`$).
+
+#### GLMERs by Age Group 
+
+_From B&S 2012:_
+
+>A separate hierarchical logistic regression model was created
+for each group of children (6–9 mo, 10–13 mo, 14–16 mo, and 18–
+20 mo) for each trial type (paired-picture and scene). Phase of
+trial (pretarget utterance vs. posttarget utterance) was included
+as a fixed-effect predictor, and subject and item were included
+as random effects. Each model predicts (the log of) the ratio of
+target to distracter looking, as calculated by counting time bins.
+
+```{r r2-cn-prepost-glmers-agegroup, cache=T}
+cn_phase_6_9_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase + (1|subject_id) + (1|noun_pair),
+                        family=binomial, cn_supp_stacked_r2[
+                         cn_supp_stacked_r2$bebe_meses<10,])
+
+cn_phase_10_13_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase + (1|subject_id) + (1|noun_pair),
+                        family=binomial, cn_supp_stacked_r2[
+                          cn_supp_stacked_r2$bebe_meses>=10 &
+                            cn_supp_stacked_r2$bebe_meses<14,])
+
+cn_phase_14_16_glmer <- glmer(cbind(target_bins, nontarget_bins) ~
+                         phase + (1|subject_id) + (1|noun_pair),
+                        family=binomial, cn_supp_stacked_r2[
+                          cn_supp_stacked_r2$bebe_meses>=14 &
+                            cn_supp_stacked_r2$bebe_meses<17,])
+```
+
+```{r r2-cn-prepost-glmers-agegroup-tabs, cache=T}
+write(texreg(list(
+  cn_phase_6_9_glmer, cn_phase_10_13_glmer, cn_phase_14_16_glmer),
+  custom.model.names=c('5-9 months', '10-13 months', '14-16 months')),
+  here('supplement/tables/exp_1/age_binned', 'cn_prepost_agegroup_glmers.tex')
+  ) # 3 columns for age
+
+# individual tables for each age group
+phase_glmer_6_9mos_tab  <-
+  cbind('Estimate'=summary(cn_phase_6_9_glmer)$coefficients[,'Estimate'],
+      'Standard Error'= summary(cn_phase_6_9_glmer)$coefficients[,'Std. Error'],
+      'P value'=summary(cn_phase_6_9_glmer)$coefficients[,'Pr(>|z|)'])
+
+phase_glmer_10_13mos_tab  <-
+  cbind('Estimate'=summary(cn_phase_10_13_glmer)$coefficients[,'Estimate'],
+      'Standard Error'= summary(cn_phase_10_13_glmer)$coefficients[,'Std. Error'],
+      'P value'=summary(cn_phase_10_13_glmer)$coefficients[,'Pr(>|z|)'])
+
+phase_glmer_14_16mos_tab  <-
+  cbind('Estimate'=summary(cn_phase_14_16_glmer)$coefficients[,'Estimate'],
+      'Standard Error'= summary(cn_phase_14_16_glmer)$coefficients[,'Std. Error'],
+      'P value'=summary(cn_phase_14_16_glmer)$coefficients[,'Pr(>|z|)'])
+
+# write to tex
+write(apa_table(phase_glmer_6_9mos_tab,
+                caption='5--9 month-olds'),
+      here('supplement/tables/exp_1/age_binned', 'cn_phase_6mos_tab.tex')
+      )
+
+write(apa_table(phase_glmer_10_13mos_tab,
+                caption='10--13 month-olds'),
+      here('supplement/tables/exp_1/age_binned', 'cn_phase_10_13mos_tab.tex')
+      )
+
+write(apa_table(phase_glmer_14_16mos_tab,
+                caption='14--16 month-olds'),
+      here('supplement/tables/exp_1/age_binned', 'cn_phase_14_16mos_tab.tex')
+      )
+
+# replicate final table in B&S 2012 SI:
+write(apa_table(
+  rbind(
+    phase_glmer_6_9mos_tab, 
+    phase_glmer_10_13mos_tab, 
+    phase_glmer_14_16mos_tab)), 
+      here('supplement/tables/exp_1/age_binned', 'cn_phase_agegroups_bsrep_tab.tex')
+  )
+# will add midrules in tex for ease
+```
+
+```{r}
+cn_fin %>%
+  group_by(age_group) %>%
+  summarize(pre_prop = na.mean(pre_target_prop),
+            post_prop = na.mean(post_target_prop))
+```
+
+# Trial Counts Across Analyses
+
+How many more trials were we able to analyze in the pre-/post-looking analysis, 
+relative to the paired difference score calculation, where so many trials with 
+otherwise useable data had to be dropped?
+
+```{r r2-cn-stimdiffs-per-pp}
+
+stim_diffs_summary_tab <- cn_target_nontarget_props_df %>%
+  dplyr::select(subject_id, age_centered, 
+                noun_pair, stimulus_set, merge_on_noun, 
+                post1_target_prop,
+                post1_nontarget_prop) %>%
+  mutate(diff = post1_target_prop - post1_nontarget_prop) %>%
+  group_by(
+    subject_id, age_centered, noun_pair, stimulus_set
+  ) %>%
+  summarize(stim_pair_diff = mean(diff)) %>%
+  filter(!is.na(stim_pair_diff)) %>%
+  group_by(subject_id) %>%
+  summarize(n=n()) %>%
+  ungroup() %>%
+  summarize(min_stimdiffs=min(n),
+            max_stimdiffs=max(n),
+            mean_stimdiffs=mean(n),
+            med_stimdiffs=median(n),
+            mode_stimdiffs=DescTools::Mode(n))
+
+#stim_diffs_summary_tab$min_stimdiffs
+#stim_diffs_summary_tab$max_stimdiffs
+#stim_diffs_summary_tab$mean_stimdiffs
+#stim_diffs_summary_tab$mode_stimdiffs
+#stim_diffs_summary_tab$med_stimdiffs
+  
+```
+
+```{r r2-cn-trials-lost}
+TOTAL_TRIALS_N <- nrow(cn_fin)
+
+MEAN_DIFF_TRIALS_N <- cn_target_nontarget_props_df %>%
+  dplyr::select(subject_id, age_centered, 
+                noun_pair, stimulus_set, merge_on_noun, 
+                post1_target_prop,
+                post1_nontarget_prop) %>%
+  mutate(diff = post1_target_prop - post1_nontarget_prop) %>%
+  group_by(
+    subject_id, age_centered, noun_pair, stimulus_set
+  ) %>%
+  summarize(stim_pair_diff = mean(diff)) %>%
+  filter(!is.na(stim_pair_diff)) %>%
+  nrow(.) * 2
+
+TRIALS_DROPPED_FOR_DIFF_CALC <- TOTAL_TRIALS_N - MEAN_DIFF_TRIALS_N 
+TRIALS_DROPPED_FOR_DIFF_CALC/TOTAL_TRIALS_N 
+```
+
+`r TRIALS_DROPPED_FOR_DIFF_CALC` trials lost (out of `r TOTAL_TRIALS_N`), or `r TRIALS_DROPPED_FOR_DIFF_CALC/TOTAL_TRIALS_N*100`\% of non-excluded trials. 
+
+```{r}
+cn_supp_stacked_r2 %>%
+  group_by(subject_id) %>%
+  summarize(trials=n()/2) %>%
+  ungroup() %>%
+  summarize(min=min(trials),
+            max=max(trials),
+            mean=mean(trials),
+            med=median(trials),
+            mode=DescTools::Mode(trials))
+```
+
+# Trial Durations
+
+```{r r2-cn-durations-trial}
+CN_MED_TRIAL_DUR_S <- median(cn_fin$trialtolookingoffset_dur_s)
+CN_MIN_TRIAL_DUR_S <- min(cn_fin[cn_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+CN_MAX_TRIAL_DUR_S <- max(cn_fin[cn_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+CN_MEAN_TRIAL_DUR_S <- mean(
+  cn_fin[cn_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+CN_CIL_TRIAL_DUR_S <- CN_MEAN_TRIAL_DUR_S -
+  ci.low(cn_fin[cn_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+CN_CIH_TRIAL_DUR_S <- CN_MEAN_TRIAL_DUR_S +
+  ci.high(cn_fin[cn_fin$trial_dur_s<30,]$trialtolookingoffset_dur_s)
+
+ggplot(cn_fin, aes(x=trialtolookingoffset_dur_s)) +
+  geom_histogram(fill='#bae4bc') +
+  sb.density.theme +
+  geom_vline(xintercept=CN_MED_TRIAL_DUR_S, color='red', lty=2) +
+  xlim(6,22) +
+  xlab('Trial Duration (s)') +
+  ylab('Number of Trials') + 
+  theme(axis.title = element_text(colour='gray30', size=11),
+        axis.text = element_text(colour='gray30', size=11),
+        axis.ticks = element_line(colour='gray30'),
+        plot.background = element_blank() ,
+        panel.grid.major = element_blank() ,
+        panel.grid.minor = element_blank() ,
+        panel.border = element_blank() ,
+        panel.background = element_blank(),
+        axis.line = element_line(color = 'gray30')) +
+  annotate(
+    'text', label = 'Median = 15s',
+    x = CN_MED_TRIAL_DUR_S+2, y = 20, size = 4, colour = 'red')
+
+ggsave(here('supplement/plots/exp_1/pdfs', 'cn_trialdur_histogram.pdf'), 
+       device='pdf', width=2.5, height=1.5, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_1/pngs', 'cn_trialdur_histogram.png'), 
+       device='png', width=2.5, height=1.5, units='in', scale=2.5)
+```
+
+```{r r2-cn-durations-triallooking}
+CN_MED_TRIAL_LOOKING_S <- median(
+  cn_fin$totaltrialtime_looking_sum_s)
+CN_MIN_TRIAL_LOOKING_S <- 
+  min(cn_fin$totaltrialtime_looking_sum_s)
+CN_MAX_TRIAL_LOOKING_S <- 
+  max(cn_fin$totaltrialtime_looking_sum_s)
+CN_MEAN_TRIAL_LOOKING_S <- 
+  mean(cn_fin$totaltrialtime_looking_sum_s)
+CN_CIL_TRIAL_LOOKING_S <- CN_MEAN_TRIAL_LOOKING_S - 
+  ci.low(cn_fin$totaltrialtime_looking_sum_s)
+CN_CIH_TRIAL_LOOKING_S <- CN_MEAN_TRIAL_LOOKING_S + 
+  ci.high(cn_fin$totaltrialtime_looking_sum_s)
+
+ggplot(cn_fin, aes(x=totaltrialtime_looking_sum_s)) +
+  geom_histogram(fill='#7bccc4') +
+  sb.density.theme +
+  geom_vline(xintercept=CN_MED_TRIAL_LOOKING_S, 
+             color='red', lty=2) +
+  xlim(2,14) +
+  xlab('Total Looking Time Duration (s)') +
+  ylab('Number of Trials') + 
+  theme(axis.title = element_text(colour='gray30', size=11),
+        axis.text = element_text(colour='gray30', size=11),
+        axis.ticks = element_line(colour='gray30'),
+        plot.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(color = 'gray30'))  +
+  annotate(
+    'text', label = 'Median = 6.8s',
+    x = CN_MED_TRIAL_LOOKING_S+1.5, y = 69, size = 4, colour = 'red')
+
+ggsave(here('supplement/plots/exp_1/pdfs', 'cn_lookingtime_histogram.pdf'), 
+       device='pdf', width=2.5, height=1.25, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_1/pngs', 'cn_lookingtime_histogram.png'),
+       device='png', width=2.5, height=1.25, units='in', scale=2.5)
+```
+
+```{r r2-cn-durs-lookingprop}
+CN_MED_LOOKING_PROP <- median(
+  cn_fin$trialtolookingoffset_prop)
+CN_MIN_LOOKING_PROP <- min(
+  cn_fin$trialtolookingoffset_prop)
+CN_MAX_LOOKING_PROP <- max(
+  cn_fin$trialtolookingoffset_prop)
+CN_MEAN_LOOKING_PROP <- mean(
+  cn_fin$trialtolookingoffset_prop)
+CN_CIL_LOOKING_PROP <- CN_MEAN_LOOKING_PROP - ci.low(
+  cn_fin$trialtolookingoffset_prop)
+CN_CIH_LOOKING_PROP <- CN_MEAN_LOOKING_PROP +ci.high(
+  cn_fin$trialtolookingoffset_prop)
+
+ggplot(cn_fin, aes(x=trialtolookingoffset_prop)) +
+  geom_histogram(fill='#7bccc4') +
+  sb.density.theme +
+  geom_vline(xintercept=CN_MED_LOOKING_PROP, color='red', lty=2) +
+  xlim(0,1) +
+  xlab('Overall Looking Time Proportion') +
+  ylab('Number of Trials') + 
+  theme(axis.title = element_text(colour='gray30', size=11),
+        axis.text = element_text(colour='gray30', size=11),
+        axis.ticks = element_line(colour='gray30'),
+        plot.background = element_blank() ,
+        panel.grid.major = element_blank() ,
+        panel.grid.minor = element_blank() ,
+        panel.border = element_blank() ,
+        panel.background = element_blank(),
+        axis.line = element_line(color = 'gray30')) +
+  annotate(
+    'text', label = 'Median = 0.47',
+    x = CN_MED_LOOKING_PROP-.12, y = 68, size = 4, colour = 'red')
+
+ggsave(here('supplement/plots/exp_1/pdfs', 'cn_lookingprop_histogram.pdf'), 
+       device='pdf', width=2.5, height=1.25, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_1/pngs', 'cn_lookingprop_histogram.png'), 
+       device='png', width=2.5, height=1.25, units='in', scale=2.5)
+```
+
+```{r r2-cn-pre-duration}
+CN_MED_PRE_DUR_S <- median(cn_fin$pre_dur_ms/1000)
+CN_MIN_PRE_DUR_S <- min(cn_fin$pre_dur_ms/1000)
+CN_MAX_PRE_DUR_S <- max(cn_fin[cn_fin$pre_dur_ms<10000,]$pre_dur_ms/1000)
+CN_MEAN_PRE_DUR_S <- mean(cn_fin[cn_fin$pre_dur_ms<10000,]$pre_dur_ms/1000)
+
+ggplot(cn_fin, aes(x=pre_dur_ms/1000))+
+  geom_histogram(fill='#bae4bc') +
+  sb.density.theme +
+  geom_vline(xintercept=CN_MED_PRE_DUR_S, color='red', lty=2) +
+  #geom_vline(xintercept = 3.133, color='red') +
+  xlim(3,6.5)+
+  xlab("'Pre-Naming' Window Duration (s)") +
+  ylab('Number of Trials') + 
+  theme(axis.title = element_text(colour='gray30', size=11),
+        axis.ticks = element_line(colour='gray30'),
+        plot.background = element_blank() ,
+        panel.grid.major = element_blank() ,
+        panel.grid.minor = element_blank() ,
+        panel.border = element_blank() ,
+        panel.background = element_blank(),
+        axis.line = element_line(color = 'gray30')) +
+  annotate(
+    'text', label = 'Median = 5s',
+    x = CN_MED_PRE_DUR_S+.4, y = 38, size = 4, colour = 'red')
+```
+
+```{r r2-cn-durs-prepost-lookingprops}
+prelookingprop_df <- cn_fin %>% 
+  mutate(window = "'Pre-Naming' Window",
+         looking_prop = pre_looking_sum_ms/pre_dur_ms,
+         median = median(looking_prop),
+         mean = mean(looking_prop)) %>%
+  dplyr::select('subject_id', 'window', 'looking_prop', 'median', 'mean')
+
+CN_PRE_MIN_PROP <- min(prelookingprop_df$looking_prop)
+CN_PRE_MAX_PROP <- max(prelookingprop_df$looking_prop)
+CN_PRE_MEAN_PROP <- mean(prelookingprop_df$looking_prop)
+CN_PRE_MEDIAN_PROP <- median(prelookingprop_df$looking_prop)
+
+postlookingprop_df <- cn_fin %>% 
+  mutate(window = "'Post-Naming'/Analysis Window",
+         looking_prop = post1_looking_sum_ms/post1_dur_ms,
+         median = median(looking_prop),
+         mean = mean(looking_prop)) %>%
+  dplyr::select('subject_id', 'window', 'looking_prop', 'median', 'mean')
+
+CN_POST_MIN_PROP <- min(postlookingprop_df$looking_prop)
+CN_POST_MAX_PROP <- max(postlookingprop_df$looking_prop)
+CN_POST_MEAN_PROP <- mean(postlookingprop_df$looking_prop)
+CN_POST_MEDIAN_PROP <- median(postlookingprop_df$looking_prop)
+
+prepost_lookingprop_df <- rbind(prelookingprop_df, postlookingprop_df)
+prepost_lookingprop_df$window <- 
+  factor(prepost_lookingprop_df$window, levels=c(
+    "'Pre-Naming' Window","'Post-Naming'/Analysis Window"), ordered=T) 
+
+prepost_lookingprop_label_df <- prepost_lookingprop_df %>%
+  group_by(window) %>%
+  summarize(median=median(median),
+            label=paste('Median =', round(median, 2), sep=' '))
+
+ggplot(prepost_lookingprop_df, aes(x=looking_prop)) +
+  geom_histogram(fill='#7bccc4') +
+  sb.density.theme +
+  geom_vline(aes(xintercept=median), color='red', lty=2) +
+  xlim(0,1) +
+  ylim(0,100) +
+  xlab('Looking Time Proportion') +
+  ylab('Number of Trials') + 
+  theme(axis.title = element_text(colour='gray30', size=11),
+        axis.text = element_text(colour='gray30', size=11),
+        axis.ticks = element_line(colour='gray30'),
+        plot.background = element_blank(),
+        strip.text.x = element_text(colour='gray30', size=11))+
+  facet_wrap(~window) +
+  geom_text(data=prepost_lookingprop_label_df,
+            aes(x=median-.24, label=label), y=21, 
+            color='red', size=4)
+
+ggsave(here('supplement/plots/exp_1/pdfs', 'cn_lookingprops_prepost.pdf'), 
+       device='pdf', width=2.75, height=1.5, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_1/pngs', 'cn_lookingprops_prepost.png'), 
+       device='png', width=2.75, height=1.5, units='in', scale=2.5)
+```
+
+```{r r2-cn-durs-prepost-lookingdurs}
+prelookingdur_df <- cn_fin %>% 
+  mutate(window = "'Pre-Naming' Window",
+         looking_dur = pre_looking_sum_ms/1000,
+         median = median(looking_dur),
+         mean = mean(looking_dur)) %>%
+  dplyr::select('subject_id', 'window', 'looking_dur', 'median', 'mean')
+
+CN_PRE_MIN_DUR <- min(prelookingdur_df$pre_looking_sum_ms)
+CN_PRE_MAX_DUR <- max(prelookingdur_df$pre_looking_sum_ms)
+CN_PRE_MEAN_DUR <- mean(prelookingdur_df$pre_looking_sum_ms)
+CN_PRE_MEDIAN_DUR <- median(prelookingdur_df$pre_looking_sum_ms)
+
+postlookingdur_df <- cn_fin %>% 
+  mutate(window = "'Post-Naming'/Analysis Window",
+         looking_dur = post1_looking_sum_ms/1000,
+         median = median(looking_dur),
+         mean = mean(looking_dur)) %>%
+  dplyr::select('subject_id', 'window', 'looking_dur', 'median', 'mean')
+
+CN_POST_MIN_DUR <- min(postlookingdur_df$looking_dur)
+CN_POST_MAX_DUR <- max(postlookingdur_df$looking_dur)
+CN_POST_MEAN_DUR <- mean(postlookingdur_df$looking_dur)
+CN_POST_MEDIAN_DUR <- median(postlookingdur_df$looking_dur)
+
+prepost_lookingdur_df <- rbind(prelookingdur_df, postlookingdur_df)
+prepost_lookingdur_df$window <- 
+  factor(prepost_lookingdur_df$window, levels=c(
+    "'Pre-Naming' Window","'Post-Naming'/Analysis Window"), ordered=T) 
+
+prepost_lookingdur_label_df <- prepost_lookingdur_df %>%
+  group_by(window) %>%
+  summarize(median=median(median),
+            label=paste('Median =', round(median, 2), sep=' '))
+
+cn_pp_durs <- ggplot(prepost_lookingdur_df, aes(x=looking_dur)) +
+  geom_histogram(fill='#7bccc4') +
+  sb.density.theme +
+  geom_vline(aes(xintercept=median), color='red', lty=2) +
+  xlim(0,9) +
+  #ylim(0,100) +
+  xlab('Looking Time Duration (s)') +
+  ylab('Number of Trials') + 
+  theme(axis.title = element_text(colour='gray30', size=11),
+        axis.text = element_text(colour='gray30', size=11),
+        axis.ticks = element_line(colour='gray30'),
+        plot.background = element_blank(),
+        strip.text.x = element_text(colour='gray30', size=11))+
+  facet_wrap(~window) +
+  geom_text(data=prepost_lookingdur_label_df,
+            aes(x=median+2, label=label), y=250, 
+            color='red', size=4)
+
+ggsave(here('supplement/plots/exp_1/pdfs', 'cn_lookingdurs_prepost.pdf'), 
+       device='pdf', width=2.75, height=1.5, units='in', scale=2.5)
+ggsave(here('supplement/plots/exp_1/pngs', 'cn_lookingdurs_prepost.png'), 
+       device='png', width=2.75, height=1.5, units='in', scale=2.5)
+```
+
+Trials in Experiment 1 were $`r CN_MEAN_TRIAL_DUR_S`$\textit{s} [$`r CN_CIL_TRIAL_DUR_S`$, $`r CN_CIH_TRIAL_DUR_S`$] long on average (\textit{range}: $`r CN_MIN_TRIAL_DUR_S`-`r CN_MAX_TRIAL_DUR_S`$\textit{s}, $M_\textnormal{dur}=`r CN_MEAN_TRIAL_DUR_S`$\textit{s}, \textit{Med}$=`r CN_MED_TRIAL_DUR_S`$\textit{s}), and infants spent an average of $`r CN_MEAN_TRIAL_LOOKING_S`$\textit{s} [$`r CN_CIL_TRIAL_LOOKING_S`$, $`r CN_CIH_TRIAL_LOOKING_S`$] total looking at the displays (\textit{range}: $`r CN_MIN_TRIAL_LOOKING_S`-`r CN_MAX_TRIAL_LOOKING_S`$\textit{s}, \textit{Med}$=`r CN_MED_TRIAL_LOOKING_S`$\textit{s}, or between $`r CN_MIN_LOOKING_PROP`$ and $`r CN_MAX_LOOKING_PROP`$ of the total trial duration;  $M=`r CN_MEAN_LOOKING_PROP`$ [$`r CN_CIL_LOOKING_PROP`$, $`r CN_CIH_LOOKING_PROP`$]).
+
+The pre-naming window was between $`r CN_MIN_PRE_DUR_S`$ and $`r CN_MAX_PRE_DUR_S`$\textit{s} ($M=`r CN_MEAN_PRE_DUR_S`$\textit{s}, \textit{Med}$=`r CN_MED_PRE_DUR_S`$\textit{s}). 
+
+The children in our final sample spent similar proportions of time looking at the displays during the pre- and post-naming periods (\textsc{pre-naming} \textit{range}: $`r CN_PRE_MIN_PROP`-`r CN_PRE_MAX_PROP`$, $M=`r CN_PRE_MEAN_PROP`$, \textit{Med}$=`r CN_PRE_MEDIAN_PROP`$; \textsc{post-naming} \textit{range}: $`r CN_POST_MIN_PROP`-`r CN_POST_MAX_PROP`$, $M=`r CN_POST_MEAN_PROP`$, \textit{Med}$=`r CN_POST_MEDIAN_PROP`$). 

@@ -1,0 +1,32 @@
+
+\begin{table}
+\begin{center}
+\begin{tabular}{l c c c}
+\hline
+ & Model 1 & Model 2 & Model 3 \\
+\hline
+(Intercept)                    & $0.03$       & $0.03$       & $0.03$       \\
+                               & $(0.07)$     & $(0.07)$     & $(0.07)$     \\
+phasepost-naming               & $0.25^{***}$ & $0.25^{***}$ & $0.25^{***}$ \\
+                               & $(0.01)$     & $(0.01)$     & $(0.01)$     \\
+age\_centered                  &              & $0.00$       & $-0.03$      \\
+                               &              & $(0.02)$     & $(0.01)$     \\
+phasepost-naming:age\_centered &              &              & $0.08^{***}$ \\
+                               &              &              & $(0.00)$     \\
+\hline
+AIC                            & $114953.46$  & $114955.35$  & $114555.51$  \\
+BIC                            & $114973.31$  & $114980.17$  & $114585.28$  \\
+Log Likelihood                 & $-57472.73$  & $-57472.68$  & $-57271.75$  \\
+Num. obs.                      & $1056$       & $1056$       & $1056$       \\
+Num. groups: subject\_id       & $21$         & $21$         & $21$         \\
+Num. groups: noun\_pair        & $8$          & $8$          & $8$          \\
+Var: subject\_id (Intercept)   & $0.03$       & $0.03$       & $0.03$       \\
+Var: noun\_pair (Intercept)    & $0.02$       & $0.02$       & $0.02$       \\
+\hline
+\multicolumn{4}{l}{\scriptsize{$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$}}
+\end{tabular}
+\caption{Statistical models}
+\label{table:coefficients}
+\end{center}
+\end{table}
+

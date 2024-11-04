@@ -1,0 +1,254 @@
+---
+title: "Exps 1 and 2 Timecourse Gaze Plot"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(here)
+here::i_am('exps_1_2_combined/timecourse_plotting.Rmd')
+set.seed(36)
+knitr::opts_chunk$set(
+  cache.extra = knitr::rand_seed,
+  echo=F,
+  message=F,
+  warning=F,
+  digits=3)
+options(scipen=1000)
+source(here('_libraries_functions_ggvars.R'))
+```
+
+```{r read-in-data-all, cache=T}
+cn_ms_df <- read.csv(
+  here('data/rb_script_exports/commonNouns_by_msec_trials.csv'))
+g_ms_df <- read.csv(
+  here('data/rb_script_exports/greetings_by_msec_trials.csv'))
+demo <- read.csv(
+  here('data/tseltalinfants_participants.csv'))
+```
+
+```{r bin-size}
+BIN_SIZE <- (1001/30)
+```
+
+```{r cn-df, cache=TRUE}
+set.seed(36)
+
+cn_ms_df$subject_id <- as.factor(cn_ms_df$id.ssid)
+
+target_word_onsets_df <- cn_ms_df %>%
+  filter(wordWindow.ordinal==3) %>%
+  group_by(path) %>%
+  summarize(target_word_onset_ms = min(wordWindow.onset))
+
+# target word onset in own column across all rows corresponding to infant:
+cn_mst0_df <- merge(cn_ms_df, target_word_onsets_df, by=c("path"), all=T)
+cn_mst0_df$target_word_onset_ms <- as.numeric(cn_mst0_df$target_word_onset_ms)
+
+# recode time relative to onset of target word:
+cn_mst0_df$t_relative <- cn_mst0_df$msec - cn_mst0_df$target_word_onset
+
+# drop data beyond 1000ms before/3500ms after onset of target word 
+cn_mst0_df <- cn_mst0_df %>% 
+  filter(cn_mst0_df$t_relative > -1000 & cn_mst0_df$t_relative <= 4000)
+
+# make single column for target looking (currently in terms of L/R by trial)
+cn_mst0_df$targetlooks <- NA # initializing new column
+# put "" when the side where the child is looking is the target side:
+# NOTE stimulus L/R wrt experimenter perspective, but RAs coded L/R from infant's perspective
+cn_mst0_df$targetlooks[cn_mst0_df$id.r==cn_mst0_df$id.target] <- 
+  cn_mst0_df$leftlooks[cn_mst0_df$id.r==cn_mst0_df$id.target] # right stimulus is on infant's L
+cn_mst0_df$targetlooks[cn_mst0_df$id.l==cn_mst0_df$id.target] <- 
+  cn_mst0_df$rightlooks[cn_mst0_df$id.l==cn_mst0_df$id.target] # left stimulus is on infant's R
+
+# convert "", which indicates positive looks (in contrast to "N/A") to 1 
+cn_mst0_df$targetlooks[cn_mst0_df$targetlooks==""] <- 1
+
+# make when looking at WRONG or NEITHER side, "0"
+#cn_mst0_df$targetlooks[cn_mst0_df$targetlooks=="N/A"] <- 0
+
+#cn_mst0_df$targetlooks <- as.numeric(cn_mst0_df$targetlooks)
+# making when looking at WRONG side "0"
+cn_mst0_df$targetlooks[
+  cn_mst0_df$id.r==cn_mst0_df$id.target & cn_mst0_df$targetlooks!=1] <- cn_mst0_df$rightlooks[
+    cn_mst0_df$id.r==cn_mst0_df$id.target & cn_mst0_df$targetlooks!=1] # positive looks to other side
+cn_mst0_df$targetlooks[
+  cn_mst0_df$id.l==cn_mst0_df$id.target & cn_mst0_df$targetlooks!=1] <- cn_mst0_df$leftlooks[
+    cn_mst0_df$id.l==cn_mst0_df$id.target & cn_mst0_df$targetlooks!=1] # positive looks to other side
+cn_mst0_df$targetlooks[cn_mst0_df$targetlooks==""] <- 0
+
+# when looking at NEITHER SIDE, "NA"
+cn_mst0_df$targetlooks[cn_mst0_df$targetlooks=="N/A"] <- NA
+cn_mst0_df$targetlooks <- as.numeric(cn_mst0_df$targetlooks)
+
+# add infant ages
+cn_mst0demo_df <- merge(cn_mst0_df[!is.na(cn_mst0_df$targetlooks), ], demo, 
+                     by="subject_id", all=T)
+
+cn_mst0demo_df$targetlooks <- as.numeric(cn_mst0demo_df$targetlooks)
+cn_mst0demo_df <- cn_mst0demo_df[!is.na(cn_mst0demo_df$targetlooks),]
+
+df <- aggregate(cn_mst0demo_df$targetlooks, 
+                 by=list(cut(cn_mst0demo_df$t_relative,
+                             seq(-4000,4000,BIN_SIZE))),
+                 tabulate)
+
+df2 <- aggregate(cn_mst0demo_df$targetlooks, #the data frame
+                 by=list(cut(cn_mst0demo_df$t_relative,
+                             seq(-4000,4000,BIN_SIZE))), 
+                 na.mean) 
+df2$mean <- df2$x
+df2$weights <- df$x
+
+df2cilow <- aggregate(cn_mst0demo_df$targetlooks, #the data frame
+                 by=list(cut(cn_mst0demo_df$t_relative,
+                             seq(-4000,4000, BIN_SIZE))), 
+                 ci.low)
+df2$ci_low <- df2$mean - df2cilow$x
+
+df2cihigh <- aggregate(cn_mst0demo_df$targetlooks, #the data frame
+                 by=list(cut(cn_mst0demo_df$t_relative,
+                             seq(-4000,4000, BIN_SIZE))), 
+                 ci.high)
+df2$ci_high <- df2$mean + df2cihigh$x
+
+df2$time <- seq((-4000+BIN_SIZE), 4000, BIN_SIZE)[1:150]
+df2$ms_range <- df2$Group.1
+df2$std_weights <- df2$weights/max(df2$weights, na.rm=T)
+```
+
+```{r g-df, cache=TRUE}
+set.seed(36)
+g_ms_df$subject_id <- as.factor(g_ms_df$id.ssid)
+
+target_word_onsets_df <- g_ms_df %>%
+  filter(wordWindow.ordinal==2) %>%
+  group_by(path) %>%
+  summarize(target_word_onset_ms = min(wordWindow.onset))
+
+# target word onset in own column across all rows corresponding to infant:
+g_mst0_df <- merge(g_ms_df[c('id.l', 'id.r', 'id.target', 'msec',  
+                              'leftlooks', 'path',
+                              'rightlooks', 'subject_id')], 
+                   target_word_onsets_df, by=c("path"), all=T) 
+  
+g_mst0_df$target_word_onset_ms <- as.numeric(g_mst0_df$target_word_onset_ms)
+g_mst0_df$msec <- as.numeric(g_mst0_df$msec)
+
+# recode time relative to onset of target word:
+g_mst0_df$t_relative <- 
+  g_mst0_df$msec - g_mst0_df$target_word_onset
+
+# make single column for target looking (currently in terms of L/R by trial)
+#mst0_df$targetlooks <- NA # initializing new column
+g_mst0_df$targetlooks <- 0 # initializing new column
+# put "" when the side where the child is looking is the target side:
+# NOTE stimulus L/R wrt experimenter perspective, but RAs coded L/R from infant's perspective
+g_mst0_df <- g_mst0_df[!is.na(g_mst0_df$id.target),]
+g_mst0_df$targetlooks[g_mst0_df$id.r==g_mst0_df$id.target] <- 
+  g_mst0_df$leftlooks[g_mst0_df$id.r==g_mst0_df$id.target] # right stimulus is on infant's L
+g_mst0_df$targetlooks[g_mst0_df$id.l==g_mst0_df$id.target] <- 
+  g_mst0_df$rightlooks[g_mst0_df$id.l==g_mst0_df$id.target] # left stimulus is on infant's R
+
+# convert "", which indicates positive looks (in contrast to "N/A") to 1 
+g_mst0_df$targetlooks[g_mst0_df$targetlooks==""] <- 1
+
+# making when looking at WRONG side "0"
+g_mst0_df$targetlooks[
+  g_mst0_df$id.r==g_mst0_df$id.target & g_mst0_df$targetlooks!=1] <- 
+  g_mst0_df$rightlooks[
+    g_mst0_df$id.r==g_mst0_df$id.target & g_mst0_df$targetlooks!=1] # positive looks to other (nontarget) side
+
+g_mst0_df$targetlooks[
+  g_mst0_df$id.l==g_mst0_df$id.target & g_mst0_df$targetlooks!=1] <- 
+  g_mst0_df$leftlooks[
+    g_mst0_df$id.l==g_mst0_df$id.target & g_mst0_df$targetlooks!=1] # positive looks to other side
+
+g_mst0_df$targetlooks[g_mst0_df$targetlooks==""] <- 0
+
+# when looking at NEITHER SIDE, "NA"
+g_mst0_df$targetlooks[g_mst0_df$targetlooks=="N/A"] <- NA
+g_mst0_df$targetlooks <- as.numeric(g_mst0_df$targetlooks)
+g_mst0_df <- g_mst0_df %>% filter(!is.na(targetlooks))
+
+# add infant ages
+g_mst0_demo_df <- merge(g_mst0_df, demo, by="subject_id")
+
+df3 <- aggregate(g_mst0_demo_df$targetlooks, #the data frame
+                 by=list(cut(g_mst0_demo_df$t_relative,
+                             seq(-3500,4000,BIN_SIZE))),
+                 tabulate) 
+
+df4 <- aggregate(g_mst0_demo_df$targetlooks, #the data frame
+                 by=list(cut(g_mst0_demo_df$t_relative,
+                             seq(-3500,4000,BIN_SIZE))), 
+                 mean) 
+df4$mean <- df4$x
+df4$weights <- df3$x
+
+df4cilow <- aggregate(g_mst0_demo_df$targetlooks, #the data frame
+                 by=list(cut(g_mst0_demo_df$t_relative,
+                             seq(-3500,4000, BIN_SIZE))), 
+                 ci.low)
+df4$ci_low <- df4$mean - df4cilow$x
+df4cihigh <- aggregate(g_mst0_demo_df$targetlooks, #the data frame
+                 by=list(cut(g_mst0_demo_df$t_relative,
+                             seq(-3500,4000,BIN_SIZE))), 
+                 ci.high)
+df4$ci_high <- df4$mean + df4cihigh$x
+
+df4$time <- seq((-3500+BIN_SIZE), 4000, BIN_SIZE)
+df4$ms_range <- df4$Group.1
+df4$std_weights <- df4$weights/max(df4$weights)
+```
+
+```{r both-timecourse-plot-scale1-window}
+df2$target <- "common noun"
+df4$target <- "honorific"
+
+megadf <- rbind(df2, df4)
+
+megadf$xmin=367
+megadf$xmax=3500
+megadf$ymin=.4
+megadf$ymax=.75
+
+ggplot(megadf, aes(x=time, y=x)) +
+  geom_vline(xintercept=367, lty=2, color=carteal, alpha=0.5) +
+  geom_vline(xintercept=3500, lty=2, color=carteal, alpha=0.5) +
+  geom_rect(data=megadf[1,], aes(xmin=xmin, xmax=xmax, 
+                                 ymin=ymin, ymax=ymax), 
+              fill=carteal, alpha=.1) +
+  geom_point(size=0.5, alpha=0.5, aes(color=target)) +
+  geom_errorbar(aes(ymin=ci_low, ymax=ci_high, color=target), 
+                width=0, linewidth=.25) +
+  geom_vline(xintercept = 0, color="red") + 
+  geom_hline(yintercept = 0.5, color="black") +
+  xlim(-1000, 4000) +
+  ylim(.4,1) +
+  xlab("Time from target word onset (ms)") +
+  ylab("Proportion of target looking") +
+  stat_smooth(aes(weight=std_weights, color=target, fill=target), se=T, fullrange = T) +
+  sb.density.theme +
+  theme(axis.text = element_text(size=8, colour="gray30"),
+        axis.ticks.x = element_line(colour="gray30"),
+        legend.position = "right",
+        legend.title=element_text(colour="gray30", size=9, face="bold"),
+        axis.title = element_text(colour="gray30", size=9, face="bold"),
+        plot.background = element_blank() ,
+        panel.grid.major = element_blank() ,
+        panel.grid.minor = element_blank() ,
+        panel.border = element_blank() ,
+        panel.background = element_blank(),
+        axis.line = element_line(color = 'black')) +
+  scale_color_manual(values=c(waterblue, sheeppink), name="Target") +
+  scale_fill_manual(values=c(waterblue, sheeppink), name="Target")
+
+ggsave('manuscript/figures/both_timecourse_5.5scale1_window.png', 
+       device='png', width=5.5, height=2.5, units='in', scale=1)
+
+ggsave('manuscript/figures/both_timecourse_5.5scale1_50_window.pdf', 
+       device='pdf', width=5.5, height=2.5, units='in', scale=1)
+```
+
